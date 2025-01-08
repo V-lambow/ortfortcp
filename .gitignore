@@ -1,0 +1,6 @@
+bin/*
+models/*
+build/*
+assets/*
+.vs/*
+.vscode/*
