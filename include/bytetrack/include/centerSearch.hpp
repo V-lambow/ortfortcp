@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include "linesfit.hpp"
+#include "myutil.h"
 
 class  CenterSearch
 {
@@ -10,7 +11,7 @@ class  CenterSearch
 public:
     struct LinesFitParams
     {
-        std::vector<std::vector<cv::Point>> contours{};
+        std::vector<std::vector<cv::Point2f>> contours{};
         /// @brief         LEASTSQUARE = 0,
         ///                PROSAC = 1,
         ///                HOUGH = 2
@@ -29,7 +30,7 @@ public:
         LBASE = 1,
         CBASE = 2
     };
-    CenterSearch(std::vector<std::vector<cv::Point>> contours = {}, CenterMode mode = CenterMode::PBASE, size_t cnt = 0) : m_mode(mode)
+    CenterSearch(std::vector<std::vector<cv::Point2f>> contours = {}, CenterMode mode = CenterMode::PBASE, size_t cnt = 0) : m_mode(mode)
 
     {
         m_linesFitParams.contours = contours;
@@ -115,35 +116,82 @@ public:
         return point;
     }
 
-    /// @brief 搜索中心点
-    /// @return
-    std::variant<cv::Point2f, std::string> search(std::vector<std::vector<cv::Point>> contours = {},
+    std::variant<cv::Point2f, std::string> search_mono(std::vector<std::vector<cv::Point>> contours,
+                                                  CenterMode mode = CenterMode::PBASE,
+                                                  size_t cnt = 0)
+                                                  {
+                                                    std::vector<std::vector<cv::Point2f>> contours2f;
+                                                    std::vector<cv::Point2f> contour2f;
+                                                    for (auto &c : contours)
+                                                    {
+                                                        contour2f = myutil::cvpt2cvptf(c);
+                                                        contours2f.push_back(contour2f);
+                                                    }
+                                                    return search_mono(contours2f, mode, cnt);
+
+                                                  }
+
+
+
+
+    std::variant<cv::Point2f, std::string> search_mono(std::vector<std::vector<cv::Point2f>> contours2f,
                                                   CenterMode mode = CenterMode::PBASE,
                                                   size_t cnt = 0)
     {
-        if (!contours.empty())
-        {
-            m_linesFitParams.contours = contours;
-        }
-        m_mode = mode;
-        if (cnt)
-        {
-            m_linesFitParams.cnt = cnt;
-        }
+        /// 需要合并
+            std::vector<cv::Point2f> contour2f;
+            for (auto &c : contours2f)
+            {
+                contour2f.insert(contour2f.end(), c.begin(), c.end());
+            }
+            auto centerRes =contourCenter(contour2f);
+            ///失败
+            if(centerRes.index()){
+                return std::get<std::string>(centerRes);
+            }
+            else{
+                return std::get<cv::Point2f>(centerRes);
+            }
+    }
 
+    std::variant<std::vector<cv::Point2f>,std::string> search_mul(std::vector<std::vector<cv::Point2f>> contours2f,
+                                                  CenterMode mode = CenterMode::PBASE,
+                                                  size_t cnt = 0)
+    {
+        std::vector<cv::Point2f> res;
+        for (const auto &c : contours2f)
+        {
+            auto centerRes = contourCenter(c);
+            /// 失败
+            if (centerRes.index())
+            {
+                return std::get<std::string>(centerRes);
+            }
+            else
+            {
+                res.push_back(std::get<cv::Point2f>(centerRes));
+            }
+        }
+        return res;
+    }
+
+
+
+
+    
+
+
+
+    std::variant<cv::Point2f, std::string> contourCenter(const std::vector<cv::Point2f> &contour2f)
+    {
         cv::Point2f res;
         switch (m_mode)
         {
         /// 质心
         case CenterMode::PBASE:
         {
-            /// 合并多条轮廓
-            std::vector<cv::Point2f> contour;
-            for (auto &c : m_linesFitParams.contours)
-            {
-                contour.insert(contour.end(), c.begin(), c.end());
-            }
-            cv::Moments m = cv::moments(contour);
+
+            cv::Moments m = cv::moments(contour2f);
             /// 计算质心
             if (m.m00 == 0)
             {
@@ -155,7 +203,8 @@ public:
         /// 拟合直线
         case CenterMode::LBASE:
         {
-            m_linesFit = std::make_unique<FitLines>(m_linesFitParams.contours, m_linesFitParams.cnt);
+            std::vector<std::vector<cv::Point2f>> contours2f = {contour2f};
+            m_linesFit = std::make_unique<FitLines>(contours2f, m_linesFitParams.cnt);
             std::cout << "fitting... ...\n";
             auto r = m_linesFit->fit(m_linesFitParams.lineMode, m_linesFitParams.distType, m_linesFitParams.reps, m_linesFitParams.aeps);
             std::cout << "line fitted... ...\n";
@@ -178,19 +227,14 @@ public:
                 return res;
             }
         }
-        
+
         break;
-      /// 质心
+            /// 质心
         case CenterMode::CBASE:
         {
-            /// 合并多条轮廓
-            std::vector<cv::Point2f> contour;
-            for (auto &c : m_linesFitParams.contours)
-            {
-                contour.insert(contour.end(), c.begin(), c.end());
-            }
             std::vector<cv::Point2f> hullcontour;
-            cv::convexHull(contour,hullcontour);
+
+            cv::convexHull(contour2f, hullcontour);
             cv::Moments m = cv::moments(hullcontour);
             /// 计算质心
             if (m.m00 == 0)
@@ -201,9 +245,9 @@ public:
         }
         break;
         default:
+
             break;
         }
-
         return res;
     }
 
@@ -211,9 +255,9 @@ public:
     {
     }
 
-private:
+  std::unique_ptr<FitLines> m_linesFit;
+public:
     CenterMode m_mode;
-    std::unique_ptr<FitLines> m_linesFit;
     LinesFitParams m_linesFitParams;
 };
 #endif

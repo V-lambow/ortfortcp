@@ -730,7 +730,7 @@ void SAM2::postprocess(std::vector<Ort::Value> &output_tensors)
     //     //!< dzy 中心寻找及绘制
     this->centerSearch_ptr.get()->setParam({.lineMode = FitLines::fitMode::PROSAC, .cnt = 4});
 
-    auto pt = this->centerSearch_ptr.get()->search(contours, CenterSearch::CenterMode::CBASE);
+    auto pt = this->centerSearch_ptr.get()->search_mono(contours, CenterSearch::CenterMode::CBASE);
 
     //   auto contourMerged = FitLines::mergeContours(contours);
     //   auto contoursDivided = FitLines::kMeansClustering(contourMerged,4);

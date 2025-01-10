@@ -8,6 +8,9 @@
 #include <algorithm>
 #include <cmath> 
 #include <opencv2/ximgproc.hpp>
+#include "myutil.h"
+
+
 
 // #define EXPORT_API
 // #ifdef EXPORT_API
@@ -34,9 +37,19 @@ public:
     // 构造函数
     FitLines(const Contours &contours, size_t cnt = 0)
         : m_contours(contours), m_cnt(cnt) {}
-
+    FitLines(const std::vector<std::vector<cv::Point2f>> contours2f, size_t cnt = 0)
+        : m_cnt(cnt)
+    {
+        m_contours = {};
+        for (const auto &contourf : contours2f)
+        {
+            m_contours.emplace_back(myutil::cvptf2cvpt(contourf));
+        }
+    }
     // 析构函数
     ~FitLines() {}
+
+
 
     // 主拟合函数，返回拟合的结果
     std::variant<std::vector<Linef>, std::string> fit(

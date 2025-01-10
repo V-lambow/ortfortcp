@@ -14,6 +14,16 @@ enum class SKORDER
     UNDEFINED =99
 };
 
+std::vector<cv::Point2f>  keyptsFliter(std::vector<PoseKeyPoint> kpts,float conf_thres=0) noexcept{
+    std::vector<cv::Point2f> res;
+    for(auto& kpt:kpts){
+        if(kpt.confidence>conf_thres){
+            res.push_back(cv::Point2f(kpt.x,kpt.y));
+        }
+    }
+    return res;
+}
+
 /// prompt 点收到信号
 static bool isPointReceived =false;
 /// 图片收到信号
@@ -52,6 +62,21 @@ void saveImage(const QByteArray& fileByte){
     qDebug()<<"file writed!";
     file.close();
 }
+
+QByteArray vecpts2QByteArr(const std::vector<cv::Point2f>& points) {  
+    QByteArray byteArray;  
+    QDataStream dataStream(&byteArray, QIODevice::WriteOnly);  
+    
+    // 写入点的数量  
+    int size = points.size();  
+    dataStream << size;  
+
+    // 写入每个 Point 的数据  
+    for (const auto& point : points) {  
+        dataStream << point.x << point.y;  
+    }  
+    return byteArray;  
+}  
 
 cv::Mat QImage2cvMat(QImage image)
 {
@@ -331,11 +356,8 @@ int ortsam2fortcp()
             cv::namedWindow("image", cv::WINDOW_NORMAL);
             cv::imshow("image", image);
             auto pt = sam2->output_point;
-            std::ostringstream ptos;
-            ptos<<pt.x<<pt.y;
-            psocket->write(ptos.str().c_str());
-            
-
+            QByteArray ptbytearr =vecpts2QByteArr({pt});
+            psocket->write(ptbytearr);
             resetReceived();
             // 结束计时
             auto end = std::chrono::high_resolution_clock::now();
@@ -453,7 +475,7 @@ int ortyolofortcp(int model_id){
     QObject::connect(psocket, &QTcpSocket::disconnected, [&]()
                      {
             connectedNum--;
-            qDebug()<<"current connectnum"<<connectedNum; 
+            qDebug()<<"current connectnum:"<<connectedNum; 
             psocket->deleteLater(); });
 
     /// 客户端状态信号回复
@@ -573,55 +595,81 @@ int ortyolofortcp(int model_id){
     // 开始计时
             auto start = std::chrono::high_resolution_clock::now();
 
-        if (model_id == 2)
-        {
-                    /// 6、推理
-        auto result = yolov10->inference(image);
-        /// 成功推理
-        if (result.index() == 0)
-        {
+            if (model_id == 2)
+            {
+                /// 6、推理
+                auto result = yolov10->inference(image);
+                /// 成功推理
+                if (result.index() == 0)
+                {
 
-        
-            cv::namedWindow("image", cv::WINDOW_NORMAL);
-            cv::imshow("image", image);
-            auto pts = yolov10->output_point;
-            std::ostringstream ptos;
-            for(auto pt:pts){
-                ptos<<pt.x<<pt.y;
+                    cv::namedWindow("image", cv::WINDOW_NORMAL);
+                    cv::imshow("image", image);
+                    auto pts = yolov10->output_point;
+
+                    QByteArray resos = vecpts2QByteArr(pts);
+                    psocket->write(resos);
+
+                    // 结束计时
+                    auto end = std::chrono::high_resolution_clock::now();
+                    // 计算耗时
+                    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+                    // 输出耗时
+                    std::cout << "推理总耗时：" << duration << "ms" << std::endl;
+                }
+                /// 推理失败
+                else
+                {
+                    std::string error = std::get<std::string>(result);
+
+                    std::println("错误：{}", error);
+                    psocket->write("inference failed!");
+                }
+                resetReceived();
             }
-            psocket->write(ptos.str().c_str());
-            
-
-            resetReceived();
-            // 结束计时
-            auto end = std::chrono::high_resolution_clock::now();
-            // 计算耗时
-            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-            // 输出耗时
-            std::cout << "推理总耗时：" << duration << "ms" << std::endl;
-        }
-        /// 推理失败
-        else
-        {
-            std::string error = std::get<std::string>(result);
-            resetReceived();
-            std::println("错误：{}", error);
-            psocket->write("inference failed!");
-        }
-        }
+        // yolov8 onnxruntime segment
         else if (model_id == 3)
         {
             std::vector<OutputParams> outputs;
             auto img = image.clone();
-            yolov8seg.get()->OnnxDetect(img,outputs); // yolov8 onnxruntime segment
+            /// 成功推理
+            if (yolov8seg.get()->OnnxDetect(img, outputs))
+            {
+                std::vector<cv::Point2f> out_points;
+                std::unique_ptr<CenterSearch> centerSearch_ptr=std::make_unique<CenterSearch>();
+                ///设置模式
+                centerSearch_ptr.get()->m_mode=CenterSearch::CenterMode::CBASE;
 
+                for(const auto& output:outputs){
+                        auto pt = centerSearch_ptr.get()->contourCenter(keyptsFliter(output.keyPoints));
+                        if(pt.index()){
+                            std::string error = std::get<std::string>(pt);
+                            std::println("错误：{}", error);
+                            psocket->write(error.c_str());
+                        }
+                        else{
+                            out_points.push_back(std::get<cv::Point2f>(pt));
+                        } 
+                }
+                QByteArray resos=  vecpts2QByteArr(out_points);
+                psocket->write(resos);
+      
+
+                auto end = std::chrono::high_resolution_clock::now();
+                // 计算耗时
+                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+                // 输出耗时
+                std::cout << "推理总耗时：" << duration << "ms" << std::endl;
+            }
+            /// 推理失败
+            else
+            {
+
+                std::cout << "inference failed!" << std::endl;
+                psocket->write("inference failed!");
+            }
             resetReceived();
-            // 结束计时
-            auto end = std::chrono::high_resolution_clock::now();
-            // 计算耗时
-            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-            // 输出耗时
-            std::cout << "推理总耗时：" << duration << "ms" << std::endl;
+
         }
     } 
 
@@ -630,7 +678,7 @@ int ortyolofortcp(int model_id){
     ///服务器关闭
     QObject::connect(server,&QTcpServer::destroyed,[&](){
         connectedNum=0;
-        qDebug()<<"current connectnum"<<connectedNum;
+        qDebug()<<"current connectnum:"<<connectedNum;
     });
 
 

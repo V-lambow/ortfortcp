@@ -216,6 +216,17 @@ double myutil::dist_P2Line(const cv::Point2f &p, const cv::Vec4f &line){
     return distance;  
 }
 
+std::vector<cv::Point2f> myutil::cvpt2cvptf(const std::vector<cv::Point> &pts)
+{
+    std::vector<cv::Point2f> points2f;
+
+    for (auto &point : pts)
+    {
+        points2f.emplace_back(static_cast<float>(point.x), static_cast<float>(point.y));
+    }
+    return points2f;
+}
+
 std::vector<cv::Point2f> myutil::pt2SubpixPtf(cv::Mat src, std::vector<cv::Point> pts)
 {
     std::vector<cv::Point2f> subpix;
@@ -236,6 +247,16 @@ std::vector<cv::Point2f> myutil::pt2SubpixPtf(cv::Mat src, std::vector<cv::Point
     catch (const cv::Exception &e)
     {
         std::cerr << e.what() << '\n';
-        return subpix;
+        return myutil::cvpt2cvptf(pts);
     }
+}
+
+std::vector<cv::Point> myutil::cvptf2cvpt(const std::vector<cv::Point2f> &ptfs){
+    std::vector<cv::Point> pts;
+    for (auto &ptf : ptfs)
+    {
+        pts.emplace_back(static_cast<int>(ptf.x), static_cast<int>(ptf.y));
+    }
+    return pts;
+
 }

@@ -17,6 +17,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "tcp_package.hpp"
+#include "yolov8_seg_onnx.h"
 
 void saveImage(const QByteArray &fileByte);
 int ortsam2fortcp();
@@ -27,5 +28,6 @@ std::variant<cv::Point, std::string> QByteArr2cvPt(const QByteArray &byteArray);
 std::variant<cv::Mat, std::string> QByteArr2Mat(const QByteArray &byteArray);
 template<typename _Tp>
 int yolov8_onnx(_Tp& task, cv::Mat& img, std::string& model_path);
+std::vector<cv::Point2f>  keyptsFliter(std::vector<PoseKeyPoint> kpts,float conf_thres) noexcept;
 
 #endif
