@@ -82,7 +82,7 @@ struct PoseParams {
 };
 
 
-
+std::vector<cv::Point> getEdgePointsFromMask(const OutputParams& output);
 bool CheckModelPath(std::string modelPath);
 bool CheckParams(int netHeight, int netWidth, const int* netStride, int strideSize);
 void DrawPred(cv::Mat& img,

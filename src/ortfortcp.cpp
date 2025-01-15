@@ -18,7 +18,7 @@ std::vector<cv::Point2f>  keyptsFliter(std::vector<PoseKeyPoint> kpts,float conf
     std::vector<cv::Point2f> res;
     for(auto& kpt:kpts){
         if(kpt.confidence>conf_thres){
-            res.push_back(cv::Point2f(kpt.x,kpt.y));
+            res.push_back(cv::Point2f((float)kpt.x,(float)kpt.y));
         }
     }
     return res;
@@ -636,24 +636,28 @@ int ortyolofortcp(int model_id){
             if (yolov8seg.get()->OnnxDetect(img, outputs))
             {
                 std::vector<cv::Point2f> out_points;
-                std::unique_ptr<CenterSearch> centerSearch_ptr=std::make_unique<CenterSearch>();
-                ///设置模式
-                centerSearch_ptr.get()->m_mode=CenterSearch::CenterMode::CBASE;
+                std::unique_ptr<CenterSearch> centerSearch_ptr = std::make_unique<CenterSearch>();
+                /// 设置模式
+                centerSearch_ptr.get()->m_mode = CenterSearch::CenterMode::CBASE;
 
-                for(const auto& output:outputs){
-                        auto pt = centerSearch_ptr.get()->contourCenter(keyptsFliter(output.keyPoints));
-                        if(pt.index()){
-                            std::string error = std::get<std::string>(pt);
-                            std::println("错误：{}", error);
-                            psocket->write(error.c_str());
-                        }
-                        else{
-                            out_points.push_back(std::get<cv::Point2f>(pt));
-                        } 
+                for (const auto &output : outputs)
+                {
+
+                    auto ptfilter = getEdgePointsFromMask(output);
+                    auto pt = centerSearch_ptr.get()->contourCenter(myutil::cvpt2cvptf(ptfilter));
+                    if (pt.index())
+                    {
+                        std::string error = std::get<std::string>(pt);
+                        std::println("错误：{}", error);
+                        psocket->write(error.c_str());
+                    }
+                    else
+                    {
+                        out_points.push_back(std::get<cv::Point2f>(pt));
+                    }
                 }
-                QByteArray resos=  vecpts2QByteArr(out_points);
+                QByteArray resos = vecpts2QByteArr(out_points);
                 psocket->write(resos);
-      
 
                 auto end = std::chrono::high_resolution_clock::now();
                 // 计算耗时

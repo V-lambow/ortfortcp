@@ -80,7 +80,11 @@ void LetterBox(const cv::Mat& image, cv::Mat& outImage, cv::Vec4d& params, const
 	params[3] = top;
 	cv::copyMakeBorder(outImage, outImage, top, bottom, left, right, cv::BORDER_CONSTANT, color);
 }
-
+/// @brief 
+/// @param maskProposals 
+/// @param maskProtos 
+/// @param output 
+/// @param maskParams 
 void GetMask(const cv::Mat& maskProposals, const cv::Mat& maskProtos, std::vector<OutputParams>& output, const MaskParams& maskParams) {
 	//std::cout << maskProtos.size << std::endl;
 
@@ -115,6 +119,28 @@ void GetMask(const cv::Mat& maskProposals, const cv::Mat& maskProtos, std::vecto
 		output[i].boxMask = mask;
 	}
 }
+
+
+   std::vector<cv::Point> getEdgePointsFromMask(const OutputParams& output) {  
+        std::vector<cv::Point> edgePoints;  
+
+        // 1. 轮廓提取  
+        std::vector<std::vector<cv::Point>> contours;  
+        cv::findContours(output.boxMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);  
+
+        // 2. 将每条轮廓的点转换到原始图像的坐标  
+        for (const auto& contour : contours) {  
+            for (const auto& p : contour) {  
+                // 将 mask 点根据 box 的左上角坐标进行平移  
+                edgePoints.push_back(cv::Point(p.x + output.box.x, p.y + output.box.y));  
+            }  
+        }  
+
+        return edgePoints;  
+    }  
+
+
+
 
 void GetMask2(const cv::Mat& maskProposals, const cv::Mat& maskProtos, OutputParams& output, const MaskParams& maskParams) {
 	int net_width = maskParams.netWidth;

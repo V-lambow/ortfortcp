@@ -8,6 +8,7 @@
 #include "ortfortcp.h"
 
 
+
 void yolo()
 {
     auto yolov10 = std::make_unique<Yolov10>();
@@ -262,9 +263,81 @@ void sam2pic()
     }
 }
 
+int yolo11_seg()
+{
+
+    std::unique_ptr<Yolov8SegOnnx> yolov8seg= std::make_unique<Yolov8SegOnnx>();
+    std::string model_path_seg = "D:\\m_code\\sam2_layout\\OrtInference-main\\models\\yolo11_seg\\yolo11_0113.onnx";
+    if (yolov8seg.get()->ReadModel(model_path_seg, true, 0, true))
+    {
+        std::cout << "yolov8seg loaded!" << std::endl;
+    }
+    else
+    {
+        std::cout << "yolov8seg loaded failed!" << std::endl;
+        return 1;
+    }
+
+    ///所有的图像输出的结果
+    std::vector<std::vector<cv::Point2f> > ptoutputs_all;
+    ///每个图像输出的结果
+    std::vector<OutputParams> outputs;
+    // list file
+    std::string folder_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\12.5\\x\\left\\*.bmp";
+    std::string output_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\12.5\\x\\left";
+
+    std::vector<cv::String> paths;
+    cv::glob(folder_path, paths, false);
+
+    for (const auto &path : paths)
+    {
+        std::println("path={}", path);
+        cv::Mat image = cv::imread(path);
+        auto start = std::chrono::high_resolution_clock::now();
+
+        auto img = image.clone();
+        /// 成功推理
+        if (yolov8seg.get()->OnnxDetect(img, outputs))
+        {
+            std::vector<cv::Point2f> out_points;
+            std::unique_ptr<CenterSearch> centerSearch_ptr = std::make_unique<CenterSearch>();
+            /// 设置模式
+            centerSearch_ptr.get()->m_mode = CenterSearch::CenterMode::CBASE;
+
+            for (const auto &output : outputs)
+            {
+                auto ptfilter = getEdgePointsFromMask(output);
+                auto pt = centerSearch_ptr.get()->contourCenter(myutil::cvpt2cvptf(ptfilter));
+                if (pt.index())
+                {
+                    std::string error = std::get<std::string>(pt);
+                    std::println("错误：{}", error);
+                }
+                else
+                {
+                    out_points.push_back(std::get<cv::Point2f>(pt));
+                }
+            }
+            ptoutputs_all.push_back(out_points);
+            auto end = std::chrono::high_resolution_clock::now();
+            // 计算耗时
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+            // 输出耗时
+            std::cout << "推理总耗时：" << duration << "ms" << std::endl;
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
+
+
+
+
+
+    /*
 
  
     std::string input;  
@@ -291,7 +364,8 @@ int main(int argc, char *argv[])
         std::cout << "无效的输入，请重新输入。" << std::endl;
     }
 
-  
+  */
+    yolo11_seg();
     // yolo();
     // yolosam();
     // yolotrace();

@@ -232,16 +232,23 @@ public:
             /// 质心
         case CenterMode::CBASE:
         {
-            std::vector<cv::Point2f> hullcontour;
-
-            cv::convexHull(contour2f, hullcontour);
-            cv::Moments m = cv::moments(hullcontour);
-            /// 计算质心
-            if (m.m00 == 0)
+            try
             {
-                return std::string("m.m00 is 0");
+                std::vector<cv::Point2f> hullcontour;
+
+                cv::convexHull(contour2f, hullcontour);
+                cv::Moments m = cv::moments(hullcontour);
+                /// 计算质心
+                if (m.m00 == 0)
+                {
+                    return std::string("m.m00 is 0");
+                }
+                res = cv::Point2f(m.m10 / m.m00, m.m01 / m.m00);
             }
-            res = cv::Point2f(m.m10 / m.m00, m.m01 / m.m00);
+            catch (const cv::Exception &e)
+            {
+                std::cerr << e.what() << '\n';
+            }
         }
         break;
         default:
