@@ -333,13 +333,6 @@ int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
 
-
-
-
-
-    /*
-
- 
     std::string input;  
     // 提示用户输入  
     std::cout << "请选择加载的模型(1、分割,2、yolo检测,3、yolo分割):";  
@@ -364,8 +357,8 @@ int main(int argc, char *argv[])
         std::cout << "无效的输入，请重新输入。" << std::endl;
     }
 
-  */
-    yolo11_seg();
+  
+    // yolo11_seg();
     // yolo();
     // yolosam();
     // yolotrace();

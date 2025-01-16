@@ -623,6 +623,7 @@ std::variant<std::vector<Ort::Value>, std::string> SAM2::mem_encoder_infer(std::
 
 void SAM2::preprocess(cv::Mat &image)
 {
+    assert(image.channels() == 3);
     std::vector<cv::Mat> mats{image};
     cv::Mat blob = cv::dnn::blobFromImages(mats, 1 / 255.0, cv::Size(1024, 1024), cv::Scalar(0, 0, 0), true, false);
     this->input_images.clear();
@@ -688,7 +689,7 @@ void SAM2::postprocess(std::vector<Ort::Value> &output_tensors)
     //     }
     //     #pragma endregion
 
-
+/*
 #pragma region ximgproc::lsd 检测直线最小距离范数法
     // 角点亚像素化
     auto subpixs = myutil::pt2SubpixPtf(*ori_img, contours[0]);
@@ -722,11 +723,13 @@ void SAM2::postprocess(std::vector<Ort::Value> &output_tensors)
     cv::Point2f optimPt = myutil::findOptimalPoint(lines, criteria);
 
     cv::circle(linesImg, optimPt, 10, cv::Scalar(0), 5);
-    cv::namedWindow("linesImg", cv::WINDOW_NORMAL);
-    cv::imshow("linesImg", linesImg);
+
+    // cv::namedWindow("linesImg", cv::WINDOW_NORMAL);
+    // cv::imshow("linesImg", linesImg);
+
 #pragma endregion ximgproc::lsd 检测直线最小距离范数法
 
-
+*/
     //     //!< dzy 中心寻找及绘制
     this->centerSearch_ptr.get()->setParam({.lineMode = FitLines::fitMode::PROSAC, .cnt = 4});
 

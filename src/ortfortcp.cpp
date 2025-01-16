@@ -18,7 +18,7 @@ std::vector<cv::Point2f>  keyptsFliter(std::vector<PoseKeyPoint> kpts,float conf
     std::vector<cv::Point2f> res;
     for(auto& kpt:kpts){
         if(kpt.confidence>conf_thres){
-            res.push_back(cv::Point2f((float)kpt.x,(float)kpt.y));
+            res.push_back(cv::Point2f(kpt.x,kpt.y));
         }
     }
     return res;
@@ -36,10 +36,7 @@ void resetReceived(){
     SKORDER::UNDEFINED;
 }
 
-///推理输入图片
-cv::Mat image;
-/// @brief 推理输入点
-cv::Point point;
+
 
 
 
@@ -78,29 +75,9 @@ QByteArray vecpts2QByteArr(const std::vector<cv::Point2f>& points) {
     return byteArray;  
 }  
 
-cv::Mat QImage2cvMat(QImage image)
-{
-    cv::Mat mat;
-    qDebug() << image.format();
-    switch(image.format())
-    {
-    case QImage::Format_ARGB32:
-    case QImage::Format_RGB32:
-    case QImage::Format_ARGB32_Premultiplied:
-        mat = cv::Mat(image.height(), image.width(), CV_8UC4, (void*)image.constBits(), image.bytesPerLine());
-        break;
-    case QImage::Format_RGB888:
-        mat = cv::Mat(image.height(), image.width(), CV_8UC3, (void*)image.constBits(), image.bytesPerLine());
-        cv::cvtColor(mat, mat, cv::COLOR_BGR2RGB);
-        break;
-    case QImage::Format_Indexed8:
-        mat = cv::Mat(image.height(), image.width(), CV_8UC1, (void*)image.constBits(), image.bytesPerLine());
-        break;
-    }
-    return mat;
-}
 
-std::variant<cv::Point,std::string> QByteArr2cvPt(const QByteArray& byteArray) {  
+
+std::variant<cv::Point,std::string> QByteArr2cvPt(QByteArray& byteArray) {  
     // 确保 byteArray 至少包含 8 个字节（两个整型）  
     if (byteArray.size() < sizeof(int) * 2) {  
         return "ByteArray size is insufficient to convert to cv::Point.";
@@ -113,20 +90,70 @@ std::variant<cv::Point,std::string> QByteArr2cvPt(const QByteArray& byteArray) {
     return cv::Point(x, y);  
 }
 
-std::variant<cv::Mat, std::string> QByteArr2Mat(const QByteArray &byteArray)
+std::variant<cv::Mat, std::string> QByteArr2Mat(QByteArray& byteArray)
 {   
     QImage image;
     if (!image.loadFromData(byteArray))
     {
         return "Failed to load QImage from QByteArray.";
     }
+    // image.save("C:\\Users\\zydon\\Pictures\\Screenshots\\cellscopy.png");
     cv::Mat mat = QImage2cvMat(image);
     if (mat.empty())
     {
         return "The image to convert to cv::Mat is empty.";
     }
+
+    // cv::namedWindow("QByteArr2Mat");
+    // cv::imshow("QByteArr2Mat", mat);
+    // cv::waitKey(0);
+
+    // cv::Mat res = mat.clone();
+
+
     return mat;
     
+}
+
+cv::Mat QImage2cvMat(QImage image)
+{
+    cv::Mat mat;
+    qDebug() << image.format();
+    switch(image.format())
+    {
+    case QImage::Format_ARGB32:
+    case QImage::Format_RGB32:
+    case QImage::Format_ARGB32_Premultiplied:
+    {
+        // 复制数据以避免数据指针失效问题
+        QImage swapped = image.rgbSwapped();
+        mat = cv::Mat(swapped.height(), swapped.width(), CV_8UC4, swapped.bits(), swapped.bytesPerLine());
+        cv::cvtColor(mat, mat, cv::COLOR_RGBA2BGRA);
+        break;
+    }
+    case QImage::Format_RGB888:
+    {
+        // 复制数据以避免数据指针失效问题
+        QImage swapped = image.rgbSwapped();
+        mat = cv::Mat(swapped.height(), swapped.width(), CV_8UC3, swapped.bits(), swapped.bytesPerLine());
+        cv::cvtColor(mat, mat, cv::COLOR_RGB2BGR);
+        break;
+    }
+    case QImage::Format_Indexed8:
+    {
+        // 复制数据以避免数据指针失效问题
+        mat = cv::Mat(image.height(), image.width(), CV_8UC1, image.bits(), image.bytesPerLine());
+        break;
+    }
+
+    default:
+        break;
+    }
+    //到这步没有问题
+
+
+    cv::Mat res = mat.clone();
+    return res;
 }
 
 
@@ -134,6 +161,10 @@ std::variant<cv::Mat, std::string> QByteArr2Mat(const QByteArray &byteArray)
 /// @return 是否成功
 int ortsam2fortcp()
 {
+    /// 推理输入图片
+    cv::Mat image;
+    /// @brief 推理输入点
+    cv::Point point;
 
 #pragma region sam2模型初始化
 
@@ -153,6 +184,7 @@ int ortsam2fortcp()
         std::println("模型初始化失败错误：{}", error);
         return 1;
     }
+    std::println("model intilize done!");
 #pragma endregion
 
 #pragma region 服务器初始化
@@ -257,10 +289,12 @@ int ortsam2fortcp()
                                  if (!unpackedret.index())
                                  {
                                      qDebug() << "收到完整IMAGE图像";
-                                     saveImage(std::get<QByteArray>(unpackedret));
+                                     psocket->write("image received!");
+                                    //  saveImage(std::get<QByteArray>(unpackedret));
                                      qint64 elapsed = timer.elapsed();
                                      qDebug() << "image reveice in" << elapsed << " milliseconds";
-                                     auto resimage = QByteArr2Mat(std::get<QByteArray>(unpackedret));
+                                     auto unpackedbit=std::get<QByteArray>(unpackedret);
+                                     auto resimage = QByteArr2Mat(unpackedbit);
 
                                      /// 图像转流错误
                                      if (resimage.index())
@@ -270,7 +304,11 @@ int ortsam2fortcp()
                                          psocket->write(error.c_str());
                                          break;
                                      }
-                                     cv::Mat image = std::get<cv::Mat>(resimage);
+                                     image = std::get<cv::Mat>(resimage);
+                                    // cv::namedWindow("image", cv::WINDOW_NORMAL);
+                                    // cv::imshow("image", image);
+                                    // cv::waitKey(0);
+         
                                      isImageReceived = true;
 
                                      /// 5、加载图片
@@ -280,8 +318,9 @@ int ortsam2fortcp()
                                  /// 图像解包失败
                                  else
                                  {
-                                     qDebug() << "图像解包失败";
-                                     psocket->write("the image you send is unpacked failed!");
+                                    ///暂时无法解包
+                                    //  qDebug() << "图像解包失败";
+                                    //  psocket->write("the image you send is unpacked failed!");
                                  }
                              };
                              break;
@@ -298,7 +337,9 @@ int ortsam2fortcp()
                                      break;
                                  }
 
-   
+                                 // 解析正确
+                                 point = std::get<cv::Point>(respoint);
+
                                  /// 4、设置prompt
                                  sam2->setparms({
                                      .type = 1,
@@ -306,13 +347,10 @@ int ortsam2fortcp()
                                      .prompt_point = point,
                                  });
 
-                                //解析正确
-                                 point = std::get<cv::Point>(respoint);
-                                 std::cout<<"收到的point:" << point << std::endl;
+                                 std::cout << "收到的point:" << point << std::endl;
                                  std::ostringstream ptos;
-                                 ptos<<point.x<<point.y;
+                                 ptos << point.x << point.y;
                                  psocket->write(ptos.str().c_str());
-
 
                                  isPointReceived = true;
                              };
@@ -344,20 +382,29 @@ int ortsam2fortcp()
         {
             continue;
         }
-
+        cv::Mat colorImage;
+        cv::cvtColor(image, colorImage, cv::COLOR_GRAY2BGR);
+        
+        // cv::Mat copyimage = cv::imread("C:\\Users\\zydon\\Pictures\\Screenshots\\cellscopy.png");
         /// 6、推理
-        auto result = sam2->inference(image);
+        auto result = sam2->inference(colorImage);
         /// 成功推理
         if (result.index() == 0)
         {
 
             // 开始计时
             auto start = std::chrono::high_resolution_clock::now();
-            cv::namedWindow("image", cv::WINDOW_NORMAL);
-            cv::imshow("image", image);
+
             auto pt = sam2->output_point;
             QByteArray ptbytearr =vecpts2QByteArr({pt});
+
+            psocket->write("result");
+            psocket->flush();
+            psocket->waitForBytesWritten();
+
             psocket->write(ptbytearr);
+            psocket->flush();
+            psocket->waitForBytesWritten();
             resetReceived();
             // 结束计时
             auto end = std::chrono::high_resolution_clock::now();
@@ -398,6 +445,8 @@ int ortsam2fortcp()
 }
 
 int ortyolofortcp(int model_id){
+        ///推理输入图片
+cv::Mat image;
     std::unique_ptr<Yolov10>yolov10;
     std::unique_ptr<Yolov8SegOnnx>yolov8seg;
     /// yolo检测模型
@@ -550,7 +599,7 @@ int ortyolofortcp(int model_id){
                                          psocket->write(error.c_str());
                                          break;
                                      }
-                                     cv::Mat image = std::get<cv::Mat>(resimage);
+                                     image = std::get<cv::Mat>(resimage);
                                      isImageReceived = true;
 
                                      /// 5、加载图片
@@ -597,6 +646,9 @@ int ortyolofortcp(int model_id){
 
             if (model_id == 2)
             {
+                // cv::namedWindow("image", cv::WINDOW_NORMAL);
+                // cv::imshow("image", image);
+                // cv::waitKey(0);
                 /// 6、推理
                 auto result = yolov10->inference(image);
                 /// 成功推理
