@@ -159,7 +159,7 @@ cv::Mat QImage2cvMat(QImage image)
 
 /// @brief 从tcp信号推理结果
 /// @return 是否成功
-int ortsam2fortcp()
+int ortsam2fortcp(uint port)
 {
     /// 推理输入图片
     cv::Mat image;
@@ -189,7 +189,6 @@ int ortsam2fortcp()
 
 #pragma region 服务器初始化
     QString ip{"127.0.0.1"};
-    quint16 port = 8001;
     TCPpkg::UnPack unpacktool;
     QTcpServer *server = new QTcpServer();
     server->listen(QHostAddress(ip), port);

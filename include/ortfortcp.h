@@ -20,7 +20,7 @@
 #include "yolov8_seg_onnx.h"
 
 void saveImage(const QByteArray &fileByte);
-int ortsam2fortcp();
+int ortsam2fortcp(uint port);
 int ortyolofortcp(int model_id);
 void resetReceived();
 cv::Mat QImage2cvMat(QImage image);

@@ -333,16 +333,33 @@ int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
 
-    std::string input;  
+    std::string input;
+    std::string input2;  
+    uint portNum; 
     // 提示用户输入  
     std::cout << "请选择加载的模型(1、分割,2、yolo检测,3、yolo分割):";  
     std::getline(std::cin, input); // 从终端获取输入 
+
+portNumin:
+    try
+    {
+        std::cout << "请输入端口号(2048~65535):";
+        std::getline(std::cin, input2); // 从终端获取输入
+        portNum = std::stoi(input2);
+        if (portNum < 2048 || portNum > 65535)
+        throw std::invalid_argument("端口号必须在2048~65535之间");
+    }
+    catch (const std::exception &e)
+    {
+        std::cout << "错误：" << e.what() << std::endl;
+        goto portNumin;
+    }
 
     // 根据用户输入执行相应的操作
     if (input == "1") {
         std::cout << "加载分割模型..." << std::endl;
         // 加载分割模型的代码
-          ortsam2fortcp();
+          ortsam2fortcp(portNum);
     } else if (input == "2") {
         std::cout << "加载yolo检测模型..." << std::endl;
         // 加载检测模型的代码
