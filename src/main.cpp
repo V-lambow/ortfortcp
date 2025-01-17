@@ -340,20 +340,19 @@ int main(int argc, char *argv[])
     std::cout << "请选择加载的模型(1、分割,2、yolo检测,3、yolo分割):";  
     std::getline(std::cin, input); // 从终端获取输入 
 
-portNumin:
-    try
-    {
-        std::cout << "请输入端口号(2048~65535):";
-        std::getline(std::cin, input2); // 从终端获取输入
-        portNum = std::stoi(input2);
-        if (portNum < 2048 || portNum > 65535)
-        throw std::invalid_argument("端口号必须在2048~65535之间");
-    }
-    catch (const std::exception &e)
-    {
-        std::cout << "错误：" << e.what() << std::endl;
-        goto portNumin;
-    }
+    while (true) {  
+        try {  
+            std::cout << "请输入端口号(2048~65535): ";  
+            std::getline(std::cin, input2); // 从终端获取输入  
+            portNum = std::stoi(input2);  
+            if (portNum < 2048 || portNum > 65535)  
+                throw std::invalid_argument("端口号必须在2048~65535之间");  
+            // 输入有效，跳出循环  
+            break;  
+        } catch (const std::exception &e) {  
+            std::cout << "错误：" << e.what() << std::endl;  
+        }  
+    }  
 
     // 根据用户输入执行相应的操作
     if (input == "1") {
