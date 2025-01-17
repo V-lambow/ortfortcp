@@ -188,7 +188,7 @@ int ortsam2fortcp(uint port)
 #pragma endregion
 
 #pragma region 服务器初始化
-    QString ip{"127.0.0.1"};
+    QString ip{"192.168.100.1"};
     TCPpkg::UnPack unpacktool;
     QTcpServer *server = new QTcpServer();
     server->listen(QHostAddress(ip), port);
@@ -264,6 +264,7 @@ int ortsam2fortcp(uint port)
                              qDebug() << "switch to receive point mode!";
                              curOrderMode = SKORDER::RECEIVE_POINT;
                              psocket->write("switch to receive point mode!");
+                             resetReceived();
                          };
                          break;
                          case static_cast<int>(SKORDER::TIMEOUT):
@@ -349,13 +350,14 @@ int ortsam2fortcp(uint port)
                                  std::cout << "收到的point:" << point << std::endl;
                                  std::ostringstream ptos;
                                  ptos << point.x << point.y;
-                                 psocket->write(ptos.str().c_str());
+                                 psocket->write("point received!");
 
                                  isPointReceived = true;
                              };
                              break;
                              case SKORDER::TIMEOUT:
                              {
+                                resetReceived();
                              };
                              break;
                              default:
@@ -397,11 +399,18 @@ int ortsam2fortcp(uint port)
             auto pt = sam2->output_point;
             QByteArray ptbytearr =vecpts2QByteArr({pt});
 
-            psocket->write("result");
-            psocket->flush();
-            psocket->waitForBytesWritten();
+            // psocket->write("result");
+            // psocket->flush();
+            // psocket->waitForBytesWritten();
 
-            psocket->write(ptbytearr);
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+
+            // psocket->write(ptbytearr);
+            // psocket->flush();
+            // psocket->waitForBytesWritten();
+
+            psocket->write(("result,"+std::to_string(pt.x)+","+std::to_string(pt.y)).c_str());
             psocket->flush();
             psocket->waitForBytesWritten();
             resetReceived();
