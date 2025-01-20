@@ -147,7 +147,12 @@ std::variant<bool,std::string> Yolov10::inference(cv::Mat &image){
     return true;
 }
 
-void Yolov10::preprocess(cv::Mat &image){
+void Yolov10::preprocess(cv::Mat &image){\
+    // 1. 直接resize
+    // 2. 图像padding
+    // 3. 归一化
+    // 4. 转置
+    outputClear();
     cv::Mat image_ = image.clone();
     auto net_w = (float)this->input_nodes[0].dim.at(3); // 640
     auto net_h = (float)this->input_nodes[0].dim.at(2); // 640
@@ -166,9 +171,6 @@ void Yolov10::preprocess(cv::Mat &image){
 
 void Yolov10::postprocess(std::vector<Ort::Value> &output_tensors){
     float* output = output_tensors[0].GetTensorMutableData<float>(); // 1*300*6
-    std::vector<float> scores;
-    std::vector<int> labels;
-    std::vector<cv::Rect> boxes;
     auto net_w = (float)this->input_nodes[0].dim.at(3); // 1024
     auto net_h = (float)this->input_nodes[0].dim.at(2); // 1024
     float scale = std::min(net_w/ori_img->cols,net_h/ori_img->rows);
@@ -198,6 +200,9 @@ void Yolov10::postprocess(std::vector<Ort::Value> &output_tensors){
     //*****************************************************
     std::vector<int>indices;
     cv::dnn::NMSBoxes(boxes,scores,this->parms.score,this->parms.nms,indices);
+    
+    // 按名称排序
+    sortBoxesByNames(labels,boxes);
 
     ///box中心点
     for(const auto& box:boxes){
@@ -219,3 +224,31 @@ void Yolov10::postprocess(std::vector<Ort::Value> &output_tensors){
         ,1,1.1,cv::Scalar{b,g,r});
     }
 }
+
+
+void Yolov10::outputClear(){
+    this->output_point.clear();
+    this->scores.clear();
+    this->labels.clear();
+    this->boxes.clear();
+}
+
+void Yolov10::sortBoxesByNames(std::vector<int>& names, std::vector<cv::Rect>& boxes){
+    assert(names.size() == boxes.size(), "names and boxes must have the same size");
+    std::vector<std::pair<int, cv::Rect>> pairs;
+    for (size_t i = 0; i < names.size(); ++i) {
+        pairs.push_back(std::make_pair(names[i], boxes[i]));
+    }
+    // 按名称进行排序
+    std::sort(pairs.begin(), pairs.end(), [](const std::pair<int, cv::Rect>& a, const std::pair<int, cv::Rect>& b) {
+        return a.first < b.first;
+    });
+    // 分离排序后的名称和框
+    names.clear();
+    boxes.clear();
+    for (const auto& pair : pairs) {
+        names.push_back(pair.first);
+        boxes.push_back(pair.second);
+    }
+}
+

@@ -12,7 +12,7 @@
 void yolo()
 {
     auto yolov10 = std::make_unique<Yolov10>();
-    std::vector<std::string> onnx_paths{"D:\\m_code\\sam2_layout\\OrtInference-main\\models\\yolov10\\yolov10s.onnx"};
+    std::vector<std::string> onnx_paths{"D:\\m_code\\sam2_layout\\OrtInference-main\\models\\yolov10\\yolov10m_0117.onnx"};
     auto r = yolov10->initialize(onnx_paths, true);
     if (r.index() != 0)
     {
@@ -23,8 +23,8 @@ void yolo()
     yolov10->setparms({.score = 0.5f, .nms = 0.8f});
 
     //list file
-    std::string folder_path = "D:/m_code/sam2_layout/OrtInference-main/assets/input/*.jpg";
-    std::string output_path = "D:\\m_code\\sam2_layout\\OrtInference-main\\assets\\output\\";
+    std::string folder_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\12.5\\x\\left\\*.bmp";
+    std::string output_path = "D:\\m_code\\sam2_layout\\OrtInference-main\\assets\\output\\0117";
 
     std::vector<cv::String> paths;
     cv::glob(folder_path, paths, false);
@@ -216,10 +216,11 @@ void sam2pic()
     auto sam2 = std::make_unique<SAM2>();
     /// 2、初始化模型参数路径
     std::vector<std::string> onnx_paths{
-        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/image_encoder.onnx",
-        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/memory_attention.onnx",
-        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/image_decoder.onnx",
-        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/memory_encoder.onnx"};
+        "../models/sam2/large/image_encoder.onnx",
+        "../models/sam2/large/memory_attention.onnx",
+        "../models/sam2/large/image_decoder.onnx",
+        "../models/sam2/large/memory_encoder.onnx"};
+
     /// 3、初始化模型
     auto r = sam2->initialize(onnx_paths, true);
     if (r.index() != 0)
@@ -332,6 +333,7 @@ int yolo11_seg()
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
+
 
     std::string input;
     std::string input2;  

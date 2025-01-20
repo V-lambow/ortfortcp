@@ -27,6 +27,7 @@ private:
 protected:
     void preprocess(cv::Mat &image);
     void postprocess(std::vector<Ort::Value>& output_tensors);
+    void sortBoxesByNames(std::vector<int>& names, std::vector<cv::Rect>& boxes);
 public:
     Yolov10(){};
     Yolov10(const Yolov10&) = delete;// 删除拷贝构造函数
@@ -35,5 +36,10 @@ public:
     int setparms(ParamsV10 parms);
     std::variant<bool,std::string> initialize(std::vector<std::string>& onnx_paths, bool is_cuda) override;
     std::variant<bool,std::string> inference(cv::Mat &image) override;
+
+    void outputClear();
     std::vector<cv::Point2f> output_point{};
+    std::vector<float> scores{};
+    std::vector<int> labels{};
+    std::vector<cv::Rect> boxes{};
 };

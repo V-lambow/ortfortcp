@@ -37,9 +37,6 @@ void resetReceived(){
 }
 
 
-
-
-
 /// @brief 指令集
 static const QVector<QString> skorder={"imagein","pointin","timeout"};
 
@@ -74,8 +71,6 @@ QByteArray vecpts2QByteArr(const std::vector<cv::Point2f>& points) {
     }  
     return byteArray;  
 }  
-
-
 
 std::variant<cv::Point,std::string> QByteArr2cvPt(QByteArray& byteArray) {  
     // 确保 byteArray 至少包含 8 个字节（两个整型）  
@@ -759,3 +754,215 @@ cv::Mat image;
 }
 
 
+/// @brief 从tcp信号推理结果
+/// @return 是否成功
+int ortyolosam2fortcp(uint port)
+{
+    /// 推理输入图片
+    cv::Mat image;
+
+
+#pragma region sam2模型初始化
+
+    /// 1、开辟对象
+    auto sam2 = std::make_unique<SAM2>();
+    /// 2、初始化模型参数路径
+    std::vector<std::string> sam2onnx_paths{
+        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/image_encoder.onnx",
+        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/memory_attention.onnx",
+        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/image_decoder.onnx",
+        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/memory_encoder.onnx"};
+    /// 3、初始化模型
+    auto rsam = sam2->initialize(sam2onnx_paths, true);
+    if (rsam.index() != 0)
+    {
+        std::string error = std::get<std::string>(rsam);
+        std::println("模型初始化失败错误：{}", error);
+        return 1;
+    }
+    std::println("sam intilize done!");
+#pragma endregion
+
+#pragma region yolo模型初始化
+
+    /// 1、开辟对象
+    auto yolov10 = std::make_unique<Yolov10>();
+    /// 2、初始化模型参数路径
+    std::vector<std::string> yoloonnx_paths{"D:\\m_code\\sam2_layout\\OrtInference-main\\models\\yolov10\\yolov10m_0117.onnx"};
+    /// 3、初始化模型
+    auto ryolo = yolov10->initialize(yoloonnx_paths, true);
+    if (ryolo.index()!= 0)
+    {
+        std::string error = std::get<std::string>(ryolo);
+        std::println("模型初始化失败错误：{}", error);
+        return 1;
+    }
+    yolov10.get()->setparms({.score = 0.5f,.nms = 0.8f});
+    std::println("yolo intilize done!");
+
+#pragma endregion
+
+
+#pragma region 服务器初始化
+    QString ip{"192.168.100.1"};
+    TCPpkg::UnPack unpacktool;
+    QTcpServer *server = new QTcpServer();
+    server->listen(QHostAddress(ip), port);
+    QTcpSocket *psocket = nullptr;
+
+    if (server->isListening())
+        qDebug() << "listening  on " << ip << ":" << port;
+    else
+    {
+        qDebug() << "listening  failed: " << ip << ":" << port;
+    }
+#pragma endregion
+
+    /// 有新链接
+    QObject::connect(server, &QTcpServer::newConnection, [&]()
+                     {
+                         connectedNum++;
+                         qDebug() << "current connectnum:" << connectedNum;
+
+                         
+                         psocket = server->nextPendingConnection();
+                         auto socketpot = psocket->localPort();
+
+                         psocket->write(QString::number(socketpot).toUtf8() + "linked");
+                    
+
+    /// 客户端失去连接
+    QObject::connect(psocket, &QTcpSocket::disconnected, [&]()
+                     {
+            connectedNum--;
+            qDebug()<<"current connectnum"<<connectedNum; 
+            psocket->deleteLater(); });
+
+
+    QObject::connect(psocket, &QTcpSocket::readyRead, [&]()
+    {
+                         auto message = psocket->readAll();
+
+                         QDataStream os(message);
+                         auto orderbyte = message.mid(0, sizeof(char[7]));
+                         auto caseidx = skorder.indexOf(orderbyte);
+                         switch (caseidx)
+                         {
+                         /// 转换为接收图像模式
+                         case static_cast<int>(SKORDER::RECEIVE_IMG):
+                         {
+                             qDebug() << "switch to receive image mode!";
+                             curOrderMode = SKORDER::RECEIVE_IMG;
+                             psocket->write("switch to receive image mode!");
+                         };
+                         break;
+                         case static_cast<int>(SKORDER::TIMEOUT):
+                         {
+                             qDebug() << "time out!";
+                             resetReceived();
+                             psocket->write("reseted!");
+                         };
+                         break;
+                         case -1:
+                         {
+                             switch (curOrderMode)
+                             {
+                             case SKORDER::RECEIVE_IMG:
+                             {
+                                 QElapsedTimer timer;
+                                 timer.start();
+                                 qDebug() << "收到一条IMAGE信息";
+                                 auto unpackedret = unpacktool(message);
+
+                                 /// 输出
+                                 if (!unpackedret.index())
+                                 {
+                                     qDebug() << "收到完整IMAGE图像";
+                                     psocket->write("image received!");
+                                    //  saveImage(std::get<QByteArray>(unpackedret));
+                                     qint64 elapsed = timer.elapsed();
+                                     qDebug() << "image reveice in" << elapsed << " milliseconds";
+                                     auto unpackedbit=std::get<QByteArray>(unpackedret);
+                                     auto resimage = QByteArr2Mat(unpackedbit);
+
+                                     /// 图像转流错误
+                                     if (resimage.index())
+                                     {
+                                        std::string error = std::get<std::string>(resimage);
+                                         std::cout << error << std::endl;
+                                         psocket->write(error.c_str());
+                                         break;
+                                     }
+                                     image = std::get<cv::Mat>(resimage);
+                                     std::cout<<"成功收到并解析图像"<<"height:"<<image.rows<<"width:"<<image.cols<<std::endl;
+
+                                     isImageReceived = true;
+                                    
+                                    auto yoloRes = yolov10->inference(image);
+                                    if (yoloRes.index())
+                                    {
+                                        std::cout<<"yolo推理失败"<<std::endl;
+                                        psocket->write("yolo inference failed!");
+                                        break;
+                                    }
+                                    std::vector<cv::Rect> out_boxes = yolov10->boxes;
+                                    std::vector<cv::Point2f> out_ceters;
+                                    ///开始sam2推理
+                                    for(auto &box:out_boxes){
+                                        sam2->setparms({.type=0,.prompt_box=box});
+                                        auto samRes = sam2->inference(image);
+                                        if (samRes.index())
+                                        {
+                                            std::cout<<"sam2推理失败"<<std::endl;
+                                            psocket->write("sam2 inference failed!");
+                                            break;
+                                        }
+                                        out_ceters.push_back(sam2->output_point);
+                                    }
+                                    /// 发送字符串结果
+                                    psocket->write("result,");
+                                    psocket->flush();
+                                    psocket->waitForBytesWritten();
+                                    for(auto &pt:out_ceters){
+                                        std::string resstr = std::to_string(pt.x)+","+std::to_string(pt.y)+";";
+                                        psocket->write(resstr.c_str());
+                                        psocket->flush();
+                                        psocket->waitForBytesWritten();
+
+                                    }
+                                 }
+                             };
+                             break;
+                             default:
+                             {
+                                 psocket->write("wrong order!");
+                             };
+                             break;
+                             }
+                         };
+                         break;
+                         }
+                     });
+
+   
+
+    });
+
+    ///服务器关闭
+    QObject::connect(server,&QTcpServer::destroyed,[&](){
+        connectedNum=0;
+        qDebug()<<"current connectnum"<<connectedNum;
+    });
+
+
+
+
+    //    QFile file("C:\\Users\\zydon\\Pictures\\Screenshots\\cells.png");
+    //    if(file.open(QIODevice::ReadOnly))
+    //    {
+    //        QByteArray fileByte =file.readAll();
+    //        auto fileBytepacked =TCPpkg::pack(fileByte);
+    //        psocket.get()->write(fileBytepacked);
+    //    }
+ return 0;
+}
