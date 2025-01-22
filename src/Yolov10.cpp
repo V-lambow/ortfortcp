@@ -137,7 +137,7 @@ std::variant<bool,std::string> Yolov10::inference(cv::Mat &image){
     }
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    std::println("duration = {}ms", duration);
+    std::println("yolov10 inference duration = {}ms", duration);
     // 输出后处理
     try {
         this->postprocess(output_tensors);
@@ -170,6 +170,9 @@ void Yolov10::preprocess(cv::Mat &image){\
 }
 
 void Yolov10::postprocess(std::vector<Ort::Value> &output_tensors){
+        std::vector<float> scores{};
+    std::vector<int> labels{};
+    std::vector<cv::Rect> boxes{};
     float* output = output_tensors[0].GetTensorMutableData<float>(); // 1*300*6
     auto net_w = (float)this->input_nodes[0].dim.at(3); // 1024
     auto net_h = (float)this->input_nodes[0].dim.at(2); // 1024
@@ -201,12 +204,10 @@ void Yolov10::postprocess(std::vector<Ort::Value> &output_tensors){
     std::vector<int>indices;
     cv::dnn::NMSBoxes(boxes,scores,this->parms.score,this->parms.nms,indices);
     
-    // 按名称排序
-    sortBoxesByNames(labels,boxes);
 
     ///box中心点
-    for(const auto& box:boxes){
-        output_point.push_back({(float)box.x+(float)box.width/2,(float)box.y+(float)box.height/2});   
+    for(const auto& i:indices){
+        output_point.push_back({(float)boxes[i].x+(float)boxes[i].width/2,(float)boxes[i].y+(float)boxes[i].height/2});   
     }
     
     //*****************************************************
@@ -218,23 +219,29 @@ void Yolov10::postprocess(std::vector<Ort::Value> &output_tensors){
         double g = (hash & 0x00FF00) >> 8;
         double b = hash & 0x0000FF;
         ///**************************************************
+        output_boxes.push_back(boxes[i]);
+        output_labels.push_back(labels[i]);
+
+        ///**************************************************
         cv::rectangle(*ori_img,cv::Rect{boxes[i].x,boxes[i].y-20,boxes[i].width,20},cv::Scalar{25,255,188},-1);
         cv::rectangle(*ori_img,boxes[i],cv::Scalar{b,g,r},2);
         cv::putText(*ori_img,std::format("{}:{:.2f}",name,scores[i]),cv::Point{boxes[i].x,boxes[i].y-5}
         ,1,1.1,cv::Scalar{b,g,r});
     }
+    // 按名称排序
+    sortBoxesByNames(output_labels,output_boxes);
+
 }
 
 
 void Yolov10::outputClear(){
     this->output_point.clear();
-    this->scores.clear();
-    this->labels.clear();
-    this->boxes.clear();
+    this->output_labels.clear();
+    this->output_boxes.clear();
 }
 
 void Yolov10::sortBoxesByNames(std::vector<int>& names, std::vector<cv::Rect>& boxes){
-    assert(names.size() == boxes.size(), "names and boxes must have the same size");
+    assert(names.size() == boxes.size());
     std::vector<std::pair<int, cv::Rect>> pairs;
     for (size_t i = 0; i < names.size(); ++i) {
         pairs.push_back(std::make_pair(names[i], boxes[i]));

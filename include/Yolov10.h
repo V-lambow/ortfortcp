@@ -39,7 +39,6 @@ public:
 
     void outputClear();
     std::vector<cv::Point2f> output_point{};
-    std::vector<float> scores{};
-    std::vector<int> labels{};
-    std::vector<cv::Rect> boxes{};
+    std::vector<int> output_labels{};
+    std::vector<cv::Rect> output_boxes{};
 };

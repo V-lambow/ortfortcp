@@ -20,9 +20,11 @@
 #include "yolov8_seg_onnx.h"
 
 void saveImage(const QByteArray &fileByte);
-int ortsam2fortcp(uint port);
-int ortyolofortcp(int model_id);
+int ortsam2fortcp(QString ip,uint port);
+int ortyolofortcp(QString ip,uint portNumint ,int model_id);
+int ortyolosam2fortcp(QString ip, uint port);
 void resetReceived();
+bool isValidIp(const QString& ip);
 cv::Mat QImage2cvMat(QImage image);
 std::variant<cv::Point, std::string> QByteArr2cvPt(const QByteArray &byteArray);
 std::variant<cv::Mat, std::string> QByteArr2Mat(const QByteArray &byteArray);

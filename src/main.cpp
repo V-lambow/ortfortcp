@@ -12,7 +12,7 @@
 void yolo()
 {
     auto yolov10 = std::make_unique<Yolov10>();
-    std::vector<std::string> onnx_paths{"D:\\m_code\\sam2_layout\\OrtInference-main\\models\\yolov10\\yolov10m_0117.onnx"};
+    std::vector<std::string> onnx_paths{"..\\..\\models\\yolov10\\yolov10m_0117.onnx"};
     auto r = yolov10->initialize(onnx_paths, true);
     if (r.index() != 0)
     {
@@ -24,7 +24,7 @@ void yolo()
 
     //list file
     std::string folder_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\12.5\\x\\left\\*.bmp";
-    std::string output_path = "D:\\m_code\\sam2_layout\\OrtInference-main\\assets\\output\\0117";
+    std::string output_path = "D:\\m_code\\sam2_layout\\OrtInference-main\\assets\\output\\0117\\";
 
     std::vector<cv::String> paths;
     cv::glob(folder_path, paths, false);
@@ -34,14 +34,16 @@ void yolo()
         std::println("path={}", path);
         cv::Mat image = cv::imread(path);
         auto start = std::chrono::high_resolution_clock::now();
-        auto result = yolov10->inference(image);
-        auto end = std::chrono::high_resolution_clock::now();
+         auto result = yolov10->inference(image);
+         std::cout << "找到"<<yolov10.get()->output_boxes.size()<<"个目标"<<std::endl;
+                 auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-        std::println("duration = {}ms", duration);
+        std::println("yolo inference duration = {}ms", duration);
         if (result.index() == 0)
         {
             auto filename = std::filesystem::path(path).filename().string();
             cv::imwrite(output_path + filename, image);
+            cv::namedWindow("Image", cv::WINDOW_NORMAL);
             cv::imshow("Image", image);
             cv::waitKey(0);
         }
@@ -334,49 +336,75 @@ int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
 
+    
 
     std::string input;
-    std::string input2;  
-    uint portNum; 
-    // 提示用户输入  
-    std::cout << "请选择加载的模型(1、分割,2、yolo检测,3、yolo分割):";  
-    std::getline(std::cin, input); // 从终端获取输入 
+    uint portNum{}; 
+    QString ip{};
+    
+
+    while (true)
+    {
+        std::cout << "please input ip adress: (xx.xx.xx.xx)";
+        std::getline(std::cin, input); // 从终端获取输入
+        if(input==""){
+            input ="127.0.0.1";
+        }
+        if (isValidIp(input.c_str())) {
+            ip = QString{input.c_str()};
+            break;
+        } else {
+            std::cout << "invalid ip adress,retry." << std::endl;
+        }
+    }
+    
 
     while (true) {  
         try {  
-            std::cout << "请输入端口号(2048~65535): ";  
-            std::getline(std::cin, input2); // 从终端获取输入  
-            portNum = std::stoi(input2);  
+            std::cout << "please input port number[2048,65535]: ";  
+            std::getline(std::cin, input); // 从终端获取输入  
+            portNum = std::stoi(input);  
             if (portNum < 2048 || portNum > 65535)  
-                throw std::invalid_argument("端口号必须在2048~65535之间");  
+                throw std::invalid_argument("port number must be [2048,65535]");  
             // 输入有效，跳出循环  
             break;  
         } catch (const std::exception &e) {  
-            std::cout << "错误：" << e.what() << std::endl;  
+            std::cout << "error:" << e.what() << std::endl;  
         }  
     }  
 
+        // 提示用户输入  
+    std::cout << "please choose the model(1.segment,2.yolo detection,3.yolo segment,4.yolosam segment):";  
+    std::getline(std::cin, input); // 从终端获取输入 
+
+
     // 根据用户输入执行相应的操作
     if (input == "1") {
-        std::cout << "加载分割模型..." << std::endl;
+        std::cout << "load 1 ai toolkit..." << std::endl;
         // 加载分割模型的代码
-          ortsam2fortcp(portNum);
+          ortsam2fortcp(ip,portNum);
     } else if (input == "2") {
-        std::cout << "加载yolo检测模型..." << std::endl;
+        std::cout << "load 2 ai toolkit..." << std::endl;
         // 加载检测模型的代码
-          ortyolofortcp(2);
+          ortyolofortcp(ip,portNum,2);
 
     } else if (input == "3") {
-        std::cout << "加载yolo分割模型..." << std::endl;
+        std::cout << "load 3 ai toolkit..." << std::endl;
         // 加载检测模型的代码
-          ortyolofortcp(3);
+          ortyolofortcp(ip,portNum,3);
+    }
+    else if (input == "4") {
+        std::cout << "load 4 ai toolkit..." << std::endl;
+        // 加载检测模型的代码
+          ortyolosam2fortcp(ip,portNum);
     }
     else {
-        std::cout << "无效的输入，请重新输入。" << std::endl;
+        std::cout << "error input。" << std::endl;
     }
 
   
     // yolo11_seg();
+    
     // yolo();
     // yolosam();
     // yolotrace();

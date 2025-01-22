@@ -3,6 +3,7 @@
 #include "SAM2.h"
 #include "Yolov10.h"
 #include "yolov8_seg_onnx.h"
+#include <QRegExp>
 
 /// @brief 连接的客户端数量
 static uint connectedNum =0;
@@ -36,6 +37,27 @@ void resetReceived(){
     SKORDER::UNDEFINED;
 }
 
+bool isValidIp(const QString& ip) {
+        QStringList segments = ip.split('.'); // 按 '.' 分割  
+    if (segments.size() != 4) return false; // 必须有 4 个部分  
+
+    for (const QString& segment : segments) {  
+        bool ok;  
+        int num = segment.toInt(&ok); // 转换为整数  
+
+        // 验证这些条件  
+        if (!ok || segment.isEmpty() || segment.length() > 3 || num < 0 || num > 255) {  
+            return false;  
+        }  
+
+        // 检查前导零  
+        if (segment.startsWith('0') && segment.length() > 1) {  
+            return false; // 不能有前导零，如 01, 100  
+        }  
+    }  
+
+    return true;  
+} 
 
 /// @brief 指令集
 static const QVector<QString> skorder={"imagein","pointin","timeout"};
@@ -49,7 +71,7 @@ void saveImage(const QByteArray& fileByte){
 
     QFile file("C:\\Users\\zydon\\Pictures\\Screenshots\\cellscopy.png");
     if(!file.open(QIODevice::WriteOnly)){
-        qDebug()<<"无法打开文件";
+        qDebug()<<"can not open file";
         return ;
     }
     file.write(fileByte);
@@ -154,7 +176,7 @@ cv::Mat QImage2cvMat(QImage image)
 
 /// @brief 从tcp信号推理结果
 /// @return 是否成功
-int ortsam2fortcp(uint port)
+int ortsam2fortcp(QString ip, uint port)
 {
     /// 推理输入图片
     cv::Mat image;
@@ -167,23 +189,23 @@ int ortsam2fortcp(uint port)
     auto sam2 = std::make_unique<SAM2>();
     /// 2、初始化模型参数路径
     std::vector<std::string> onnx_paths{
-        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/image_encoder.onnx",
-        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/memory_attention.onnx",
-        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/image_decoder.onnx",
-        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/memory_encoder.onnx"};
+        "..//../models/sam2/large/image_encoder.onnx",
+        "..//../models/sam2/large/memory_attention.onnx",
+        "..//../models/sam2/large/image_decoder.onnx",
+        "..//../models/sam2/large/memory_encoder.onnx"};
     /// 3、初始化模型
     auto r = sam2->initialize(onnx_paths, true);
     if (r.index() != 0)
     {
         std::string error = std::get<std::string>(r);
-        std::println("模型初始化失败错误：{}", error);
+        std::println("model inti failed：{}", error);
         return 1;
     }
     std::println("model intilize done!");
 #pragma endregion
 
 #pragma region 服务器初始化
-    QString ip{"192.168.100.1"};
+    // QString ip{"192.168.100.1"};
     TCPpkg::UnPack unpacktool;
     QTcpServer *server = new QTcpServer();
     server->listen(QHostAddress(ip), port);
@@ -277,13 +299,13 @@ int ortsam2fortcp(uint port)
                              {
                                  QElapsedTimer timer;
                                  timer.start();
-                                 qDebug() << "收到一条IMAGE信息";
+                                //  qDebug() << "收到一条IMAGE信息";
                                  auto unpackedret = unpacktool(message);
 
                                  /// 输出
                                  if (!unpackedret.index())
                                  {
-                                     qDebug() << "收到完整IMAGE图像";
+                                     qDebug() << "integrated IMAGE received!";
                                      psocket->write("image received!");
                                     //  saveImage(std::get<QByteArray>(unpackedret));
                                      qint64 elapsed = timer.elapsed();
@@ -321,7 +343,7 @@ int ortsam2fortcp(uint port)
                              break;
                              case SKORDER::RECEIVE_POINT:
                              {
-                                 qDebug() << "收到一条POINT信息";
+                                 qDebug() << "a POINT message received!";
                                  auto respoint = QByteArr2cvPt(message);
                                  // 解析错误
                                  if (respoint.index())
@@ -342,7 +364,7 @@ int ortsam2fortcp(uint port)
                                      .prompt_point = point,
                                  });
 
-                                 std::cout << "收到的point:" << point << std::endl;
+                                 std::cout << "point received:" << point << std::endl;
                                  std::ostringstream ptos;
                                  ptos << point.x << point.y;
                                  psocket->write("point received!");
@@ -414,14 +436,14 @@ int ortsam2fortcp(uint port)
             // 计算耗时
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
             // 输出耗时
-            std::cout << "推理总耗时：" << duration << "ms" << std::endl;
+            std::cout << "inference total duratiion:" << duration << "ms" << std::endl;
         }
         /// 推理失败
         else
         {
             std::string error = std::get<std::string>(result);
             resetReceived();
-            std::println("错误：{}", error);
+            std::println("error:{}", error);
             psocket->write("inference failed");
         }
     } 
@@ -447,7 +469,7 @@ int ortsam2fortcp(uint port)
  return 0;
 }
 
-int ortyolofortcp(int model_id){
+int ortyolofortcp(QString ip,uint portNumint ,int model_id){
         ///推理输入图片
 cv::Mat image;
     std::unique_ptr<Yolov10>yolov10;
@@ -463,7 +485,7 @@ cv::Mat image;
         if (r.index() != 0)
         {
             std::string error = std::get<std::string>(r);
-            std::println("错误：{}", error);
+            std::println("error：{}", error);
             return 1;
         }
         yolov10->setparms({.score = 0.5f, .nms = 0.8f});
@@ -488,14 +510,14 @@ cv::Mat image;
         }
     }
     else{
-    std::println("错误：{}","wrong model id");
+    std::println("error：{}","wrong model id");
     return 1;
 }
 
 
 #pragma region 服务器初始化
-    QString ip{"127.0.0.1"};
-    quint16 port = 8001;
+    // QString ip{"127.0.0.1"};
+    quint16 port = portNumint;
     TCPpkg::UnPack unpacktool;
     QTcpServer *server = new QTcpServer();
     server->listen(QHostAddress(ip), port);
@@ -582,13 +604,13 @@ cv::Mat image;
                              {
                                  QElapsedTimer timer;
                                  timer.start();
-                                 qDebug() << "收到一条IMAGE信息";
+                                //  qDebug() << "收到一条IMAGE信息";
                                  auto unpackedret = unpacktool(message);
 
                                  /// 输出
                                  if (!unpackedret.index())
                                  {
-                                     qDebug() << "收到完整IMAGE图像";
+                                     qDebug() << "recive integrated IMAGE";
                                      saveImage(std::get<QByteArray>(unpackedret));
                                      qint64 elapsed = timer.elapsed();
                                      qDebug() << "image reveice in" << elapsed << " milliseconds";
@@ -612,8 +634,8 @@ cv::Mat image;
                                  /// 图像解包失败
                                  else
                                  {
-                                     qDebug() << "图像解包失败";
-                                     psocket->write("the image you send is unpacked failed!");
+                                    //  qDebug() << "图像解包失败";
+                                    //  psocket->write("the image you send is unpacked failed!");
                                  }
                              };
                              break;                           
@@ -670,14 +692,14 @@ cv::Mat image;
                     // 计算耗时
                     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
                     // 输出耗时
-                    std::cout << "推理总耗时：" << duration << "ms" << std::endl;
+                    std::cout << "total inference duration:" << duration << "ms" << std::endl;
                 }
                 /// 推理失败
                 else
                 {
                     std::string error = std::get<std::string>(result);
 
-                    std::println("错误：{}", error);
+                    std::println("error :{}", error);
                     psocket->write("inference failed!");
                 }
                 resetReceived();
@@ -703,7 +725,7 @@ cv::Mat image;
                     if (pt.index())
                     {
                         std::string error = std::get<std::string>(pt);
-                        std::println("错误：{}", error);
+                        std::println("error：{}", error);
                         psocket->write(error.c_str());
                     }
                     else
@@ -718,7 +740,7 @@ cv::Mat image;
                 // 计算耗时
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
                 // 输出耗时
-                std::cout << "推理总耗时：" << duration << "ms" << std::endl;
+                std::cout << "total inference duration:" << duration << "ms" << std::endl;
             }
             /// 推理失败
             else
@@ -756,7 +778,7 @@ cv::Mat image;
 
 /// @brief 从tcp信号推理结果
 /// @return 是否成功
-int ortyolosam2fortcp(uint port)
+int ortyolosam2fortcp(QString ip, uint port)
 {
     /// 推理输入图片
     cv::Mat image;
@@ -768,16 +790,16 @@ int ortyolosam2fortcp(uint port)
     auto sam2 = std::make_unique<SAM2>();
     /// 2、初始化模型参数路径
     std::vector<std::string> sam2onnx_paths{
-        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/image_encoder.onnx",
-        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/memory_attention.onnx",
-        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/image_decoder.onnx",
-        "D:/m_code/sam2_layout/OrtInference-main/models/sam2/large/memory_encoder.onnx"};
+        "../../models/sam2/large/image_encoder.onnx",
+        "../../models/sam2/large/memory_attention.onnx",
+        "../../models/sam2/large/image_decoder.onnx",
+        "../../models/sam2/large/memory_encoder.onnx"};
     /// 3、初始化模型
     auto rsam = sam2->initialize(sam2onnx_paths, true);
     if (rsam.index() != 0)
     {
         std::string error = std::get<std::string>(rsam);
-        std::println("模型初始化失败错误：{}", error);
+        std::println("sam intilize failed ：{}", error);
         return 1;
     }
     std::println("sam intilize done!");
@@ -788,13 +810,13 @@ int ortyolosam2fortcp(uint port)
     /// 1、开辟对象
     auto yolov10 = std::make_unique<Yolov10>();
     /// 2、初始化模型参数路径
-    std::vector<std::string> yoloonnx_paths{"D:\\m_code\\sam2_layout\\OrtInference-main\\models\\yolov10\\yolov10m_0117.onnx"};
+    std::vector<std::string> yoloonnx_paths{"..\\..\\models\\yolov10\\yolov10m_0117.onnx"};
     /// 3、初始化模型
     auto ryolo = yolov10->initialize(yoloonnx_paths, true);
     if (ryolo.index()!= 0)
     {
         std::string error = std::get<std::string>(ryolo);
-        std::println("模型初始化失败错误：{}", error);
+        std::println("yolo intilize failed：{}", error);
         return 1;
     }
     yolov10.get()->setparms({.score = 0.5f,.nms = 0.8f});
@@ -804,7 +826,7 @@ int ortyolosam2fortcp(uint port)
 
 
 #pragma region 服务器初始化
-    QString ip{"192.168.100.1"};
+    // QString ip{"127.0.0.1"};
     TCPpkg::UnPack unpacktool;
     QTcpServer *server = new QTcpServer();
     server->listen(QHostAddress(ip), port);
@@ -871,13 +893,13 @@ int ortyolosam2fortcp(uint port)
                              {
                                  QElapsedTimer timer;
                                  timer.start();
-                                 qDebug() << "收到一条IMAGE信息";
+                                //  qDebug() << "收到一条IMAGE信息";
                                  auto unpackedret = unpacktool(message);
 
                                  /// 输出
                                  if (!unpackedret.index())
                                  {
-                                     qDebug() << "收到完整IMAGE图像";
+                                     qDebug() << "integrated IMAGE received!";
                                      psocket->write("image received!");
                                     //  saveImage(std::get<QByteArray>(unpackedret));
                                      qint64 elapsed = timer.elapsed();
@@ -894,31 +916,51 @@ int ortyolosam2fortcp(uint port)
                                          break;
                                      }
                                      image = std::get<cv::Mat>(resimage);
-                                     std::cout<<"成功收到并解析图像"<<"height:"<<image.rows<<"width:"<<image.cols<<std::endl;
+                                     std::cout << "sucessed recive image: " << "height:" << image.rows << "width:" << image.cols << std::endl;
 
                                      isImageReceived = true;
-                                    
-                                    auto yoloRes = yolov10->inference(image);
-                                    if (yoloRes.index())
-                                    {
-                                        std::cout<<"yolo推理失败"<<std::endl;
-                                        psocket->write("yolo inference failed!");
-                                        break;
+                                     cv::Mat colorImage;
+                                     cv::cvtColor(image, colorImage, cv::COLOR_GRAY2BGR);
+
+                                     ///yolo计时
+                                     auto start = std::chrono::high_resolution_clock::now();
+                                     std::variant<bool,std::string> yoloRes = yolov10.get()->inference(colorImage);
+                                     if (yoloRes.index())
+                                     {
+                                         std::cout << "yolo inference failed" << std::endl;
+                                         psocket->write("yolo inference failed!");
+                                         break;
+                                     }
+                                     
+                                     auto end = std::chrono::high_resolution_clock::now();
+                                     // 计算耗时
+                                     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+                                     // 输出耗时
+                                     std::cout << "yolo total duration:" << duration << "ms" << std::endl;
+                                     std::vector<cv::Rect> out_boxes = yolov10->output_boxes;
+                                     std::cout << "find obj:" << out_boxes.size() << "num" << std::endl;
+                                     std::vector<cv::Point2f> out_ceters;
+                                     /// sam2计时
+                                     auto start2 = std::chrono::high_resolution_clock::now();
+                                     /// 开始sam2推理
+                                     for (auto &box : out_boxes)
+                                     {
+                                         sam2->setparms({.type = 0, .prompt_box = box});
+                                         auto samRes = sam2->inference(colorImage);
+                                         if (samRes.index())
+                                         {
+                                             std::cout << "sam2 inference failed" << std::endl;
+                                             psocket->write("sam2 total failed!");
+                                             break;
+                                         }
+                                         out_ceters.push_back(sam2->output_point);
                                     }
-                                    std::vector<cv::Rect> out_boxes = yolov10->boxes;
-                                    std::vector<cv::Point2f> out_ceters;
-                                    ///开始sam2推理
-                                    for(auto &box:out_boxes){
-                                        sam2->setparms({.type=0,.prompt_box=box});
-                                        auto samRes = sam2->inference(image);
-                                        if (samRes.index())
-                                        {
-                                            std::cout<<"sam2推理失败"<<std::endl;
-                                            psocket->write("sam2 inference failed!");
-                                            break;
-                                        }
-                                        out_ceters.push_back(sam2->output_point);
-                                    }
+                        
+                                    auto end2 = std::chrono::high_resolution_clock::now();
+                                    // 计算耗时
+                                    auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - start2).count();
+                                    // 输出耗时
+                                    std::cout << "sam inference duration:" << duration2 << "ms" << std::endl;
                                     /// 发送字符串结果
                                     psocket->write("result,");
                                     psocket->flush();
@@ -947,6 +989,10 @@ int ortyolosam2fortcp(uint port)
    
 
     });
+    while(true){
+        QCoreApplication::processEvents();
+
+    }
 
     ///服务器关闭
     QObject::connect(server,&QTcpServer::destroyed,[&](){

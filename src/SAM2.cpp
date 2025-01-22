@@ -634,7 +634,7 @@ void SAM2::postprocess(std::vector<Ort::Value> &output_tensors)
 {
 
    ///开始计时
-    auto start = std::chrono::high_resolution_clock::now();
+    // auto start = std::chrono::high_resolution_clock::now();
 
     float *output = output_tensors[0].GetTensorMutableData<float>();
     cv::Mat outimg(this->ori_img->size(), CV_32FC1, output);
@@ -761,11 +761,12 @@ void SAM2::postprocess(std::vector<Ort::Value> &output_tensors)
 
         cv::circle(*ori_img, point, 3, cv::Scalar(50, 250, 200), 3);
     }
-    ///结束计时
-    auto end = std::chrono::high_resolution_clock::now();
-    /// 计算耗时
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    std::cout << "后处理耗时：" << duration << " ms" << std::endl;
+
+    // ///结束计时
+    // auto end = std::chrono::high_resolution_clock::now();
+    // /// 计算耗时
+    // auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    // std::cout << "sam后处理耗时：" << duration << " ms" << std::endl;
 }
 
 int SAM2::setparms(ParamsSam2 parms)
