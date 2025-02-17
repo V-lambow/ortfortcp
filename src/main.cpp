@@ -6,6 +6,8 @@
 #include "SAM2.h"
 #include <chrono>
 #include "ortfortcp.h"
+#include "yolov8_pose_onnx.h"
+
 
 
 
@@ -23,7 +25,7 @@ void yolo()
     yolov10->setparms({.score = 0.5f, .nms = 0.8f});
 
     //list file
-    std::string folder_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\12.5\\x\\left\\*.bmp";
+    std::string folder_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\01.24\\*.bmp";
     std::string output_path = "D:\\m_code\\sam2_layout\\OrtInference-main\\assets\\output\\0117\\";
 
     std::vector<cv::String> paths;
@@ -34,9 +36,9 @@ void yolo()
         std::println("path={}", path);
         cv::Mat image = cv::imread(path);
         auto start = std::chrono::high_resolution_clock::now();
-         auto result = yolov10->inference(image);
-         std::cout << "找到"<<yolov10.get()->output_boxes.size()<<"个目标"<<std::endl;
-                 auto end = std::chrono::high_resolution_clock::now();
+        auto result = yolov10->inference(image);
+        std::cout << "找到" << yolov10.get()->output_boxes.size() << "个目标" << std::endl;
+        auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
         std::println("yolo inference duration = {}ms", duration);
         if (result.index() == 0)
@@ -270,7 +272,7 @@ int yolo11_seg()
 {
 
     std::unique_ptr<Yolov8SegOnnx> yolov8seg= std::make_unique<Yolov8SegOnnx>();
-    std::string model_path_seg = "D:\\m_code\\sam2_layout\\OrtInference-main\\models\\yolo11_seg\\yolo11_0113.onnx";
+    std::string model_path_seg = "D:\\m_code\\sam2_layout\\OrtInference-main\\models\\yolo11_seg\\yolo11_seg0211.onnx";
     if (yolov8seg.get()->ReadModel(model_path_seg, true, 0, true))
     {
         std::cout << "yolov8seg loaded!" << std::endl;
@@ -286,8 +288,8 @@ int yolo11_seg()
     ///每个图像输出的结果
     std::vector<OutputParams> outputs;
     // list file
-    std::string folder_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\12.5\\x\\left\\*.bmp";
-    std::string output_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\12.5\\x\\left";
+    std::string folder_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\01.24\\*.bmp";
+    std::string output_path = "D:\\m_code\\sam2_layout\\OrtInference-main\\assets\\output\\0117\\";
 
     std::vector<cv::String> paths;
     cv::glob(folder_path, paths, false);
@@ -319,9 +321,18 @@ int yolo11_seg()
                 else
                 {
                     out_points.push_back(std::get<cv::Point2f>(pt));
+                    std::vector<std::vector<cv::Point>> contours ={ptfilter};
+                    cv::drawContours(img, contours, -1, cv::Scalar(0, 0, 255), 2);
                 }
             }
             ptoutputs_all.push_back(out_points);
+            cv::namedWindow("Image", cv::WINDOW_NORMAL);
+            std::for_each(out_points.begin(), out_points.end(), [&](const auto &pt)
+                           { cv::circle(img, pt, 5, cv::Scalar(0, 0, 255), -1); });
+            // cv::drawContours(img, ptoutputs_all, -1, cv::Scalar(0, 0, 255), 2);
+            cv::imshow("Image", img);
+            cv::waitKey(0);
+
             auto end = std::chrono::high_resolution_clock::now();
             // 计算耗时
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
@@ -332,11 +343,150 @@ int yolo11_seg()
     return 0;
 }
 
+int yolosam2()
+{
+    auto yolov10 = std::make_unique<Yolov10>();
+    std::vector<std::string> onnx_paths{"..\\..\\models\\yolov10\\yolov10m_0117.onnx"};
+    auto r = yolov10->initialize(onnx_paths, true);
+    if (r.index() != 0)
+    {
+        std::string error = std::get<std::string>(r);
+        std::println("错误：{}", error);
+        return 1;
+    }
+    yolov10->setparms({.score = 0.5f, .nms = 0.8f});
+
+    auto sam2 = std::make_unique<SAM2>();
+    std::vector<std::string> onnx_paths_sam{
+        "../../models/sam2/large/image_encoder.onnx",
+        "../../models/sam2/large/memory_attention.onnx",
+        "../../models/sam2/large/image_decoder.onnx",
+        "../../models/sam2/large/memory_encoder.onnx"};
+
+    auto r_sam = sam2->initialize(onnx_paths_sam, true);
+    if (r_sam.index() != 0)
+    {
+        std::string error = std::get<std::string>(r_sam);
+        std::println("错误：{}", error);
+        return 1;
+    }
+
+    // list file
+    std::string folder_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\01.24\\*.bmp";
+    std::string output_path = "D:\\m_code\\sam2_layout\\OrtInference-main\\assets\\output\\0117\\";
+
+    std::vector<cv::String> paths;
+    cv::glob(folder_path, paths, false);
+
+    for (const auto &path : paths)
+    {
+        auto filename = std::filesystem::path(path).filename().string();
+        std::println("path={}", path);
+        cv::Mat image = cv::imread(path);
+        cv::Mat paintedimage=image.clone();
+        auto start = std::chrono::high_resolution_clock::now();
+        auto result = yolov10->inference(paintedimage);
+        std::cout << "找到" << yolov10.get()->output_boxes.size() << "个目标" << std::endl;
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        std::println("yolo inference duration = {}ms", duration);
+
+        if (result.index() == 1)
+        {
+            std::string error = std::get<std::string>(result);
+            std::println("错误：{}", error);
+            continue;
+        }
+        for (const auto &box : yolov10.get()->output_boxes)
+        {
+            // 设置prompt
+            sam2->setparms({.type = 0,
+                            .prompt_box = box,
+                            .prompt_point = {700, 500}}); // 在原始图像上的box,point
+
+            // // 设置prompt
+            // sam2->setparms({.type = 1,
+            //                 .prompt_box = {0,0,0,0},
+            //                 .prompt_point = {box.x+box.height/2-1,box.y+box.width/2-1 }}); // 在原始图像上的box,point
+            auto result_sam = sam2->inference(image);
+            std::vector<std::vector<cv::Point>> contours_painted={sam2->output_contour};
+            if (result_sam.index() == 0)
+            {
+                drawContours(paintedimage, contours_painted, -1, cv::Scalar(0, 255, 0), 2);
+                cv::circle(paintedimage, sam2->output_point, 5, cv::Scalar(0, 255, 0), 2);
+            }
+            else
+            {
+                std::string error = std::get<std::string>(result_sam);
+                std::println("错误：{}", error);
+                continue;
+            }
+        }
+        cv::imwrite(output_path + filename, paintedimage);
+        cv::namedWindow("Image", cv::WINDOW_NORMAL);
+        cv::imshow("Image", paintedimage);
+        cv::waitKey(0);
+    }
+    return 0;
+}
+
+int yolo11_pose(){
+    std::unique_ptr<Yolov8PoseOnnx> yolo11_pose = std::make_unique<Yolov8PoseOnnx>();
+    std::string model_path_pose = "D:\\m_code\\sam2_layout\\OrtInference-main\\models\\yolo11_pose\\yolo11_pose0214.onnx";
+    if (yolo11_pose.get()->ReadModel(model_path_pose, true, 0, true))
+    {
+        std::cout << "yolo11_pose loaded!" << std::endl;
+    }
+    else
+    {
+        std::cout << "yolo11_pose loaded failed!" << std::endl;
+        return 1;
+    }
+    // list file
+    std::string folder_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\01.24\\*.bmp";
+    std::string output_path = "D:\\m_code\\sam2_layout\\OrtInference-main\\assets\\output\\0117\\";
+    std::vector<cv::String> paths;
+    cv::glob(folder_path, paths, false);
+    for (const auto &path : paths)
+    {
+        auto filename = std::filesystem::path(path).filename().string();
+        std::println("path={}", path);
+        cv::Mat image = cv::imread(path);
+        cv::Mat paintedimage=image.clone();
+        std::vector<OutputParams> outputs;
+        auto start = std::chrono::high_resolution_clock::now();
+        auto result = yolo11_pose.get()->OnnxDetect(paintedimage,outputs);
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        std::println("yolo inference duration = {}ms", duration);
+        if (result)
+        {
+            for (const auto &output : outputs)
+            {
+                for(const auto &kpt:output.keyPoints)
+                {
+                    cv::circle(paintedimage, cv::Point((int)kpt.x, (int)kpt.y), 5, cv::Scalar(0, 255, 0), 2);
+                } 
+
+            }
+        }
+        cv::imwrite(output_path + filename, paintedimage);
+        cv::namedWindow("Image", cv::WINDOW_NORMAL);
+        cv::imshow("Image", paintedimage);
+        cv::waitKey(0);
+    }
+    return 0;
+
+
+}
+
+
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
 
-    
+    yolosam2();
+    return 0;
 
     std::string input;
     uint portNum{}; 

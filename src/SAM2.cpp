@@ -647,6 +647,7 @@ void SAM2::postprocess(std::vector<Ort::Value> &output_tensors)
     std::vector<std::vector<cv::Point>> contours;
     cv::Mat dst2;
     myutil::maxAreaContour(dst, dst2, contours);
+    this->output_contour=contours[0];
 
     // cv::namedWindow("dst",cv::WINDOW_NORMAL);
     // cv::imshow("dst",dst2);
@@ -733,7 +734,7 @@ void SAM2::postprocess(std::vector<Ort::Value> &output_tensors)
     //     //!< dzy 中心寻找及绘制
     this->centerSearch_ptr.get()->setParam({.lineMode = FitLines::fitMode::PROSAC, .cnt = 4});
 
-    auto pt = this->centerSearch_ptr.get()->search_mono(contours, CenterSearch::CenterMode::CBASE);
+    auto pt = this->centerSearch_ptr.get()->search_mono(contours, CenterSearch::CenterMode::DBASE);
 
     //   auto contourMerged = FitLines::mergeContours(contours);
     //   auto contoursDivided = FitLines::kMeansClustering(contourMerged,4);

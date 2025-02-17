@@ -31,5 +31,6 @@ std::variant<cv::Mat, std::string> QByteArr2Mat(const QByteArray &byteArray);
 template<typename _Tp>
 int yolov8_onnx(_Tp& task, cv::Mat& img, std::string& model_path);
 std::vector<cv::Point2f>  keyptsFliter(std::vector<PoseKeyPoint> kpts,float conf_thres) noexcept;
+int ortyolodtsgfortcp(QString ip, uint port);
 
 #endif

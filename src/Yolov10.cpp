@@ -226,7 +226,7 @@ void Yolov10::postprocess(std::vector<Ort::Value> &output_tensors){
         cv::rectangle(*ori_img,cv::Rect{boxes[i].x,boxes[i].y-20,boxes[i].width,20},cv::Scalar{25,255,188},-1);
         cv::rectangle(*ori_img,boxes[i],cv::Scalar{b,g,r},2);
         cv::putText(*ori_img,std::format("{}:{:.2f}",name,scores[i]),cv::Point{boxes[i].x,boxes[i].y-5}
-        ,1,1.1,cv::Scalar{b,g,r});
+        ,1,1.5,cv::Scalar{b,g,r},2);
     }
     // 按名称排序
     sortBoxesByNames(output_labels,output_boxes);

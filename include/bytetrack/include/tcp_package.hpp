@@ -63,6 +63,9 @@ public:
         m_storedbyte.clear();
         m_storedpackedsize=0;
     }
+    uint getStoredsize(){
+        return m_storedpackedsize;
+    }
 
 };
 

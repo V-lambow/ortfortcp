@@ -92,4 +92,7 @@ public:
  
     ///模型输出点
     cv::Point2f output_point{0.0f,0.0f};
+
+    //模型输出轮廓
+    std::vector<cv::Point> output_contour{};
 };

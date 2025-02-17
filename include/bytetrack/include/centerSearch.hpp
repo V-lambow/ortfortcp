@@ -28,7 +28,8 @@ public:
     {
         PBASE = 0,
         LBASE = 1,
-        CBASE = 2
+        CBASE = 2,
+        DBASE = 3,
     };
     CenterSearch(std::vector<std::vector<cv::Point2f>> contours = {}, CenterMode mode = CenterMode::PBASE, size_t cnt = 0) : m_mode(mode)
 
@@ -251,6 +252,76 @@ public:
             }
         }
         break;
+        case CenterMode::DBASE:{
+            try
+            {
+                // 将浮点轮廓转换为整数坐标
+                std::vector<cv::Point> contour;
+                for (const cv::Point2f &pt : contour2f)
+                {
+                    contour.push_back(cv::Point(cvRound(pt.x), cvRound(pt.y)));
+                }
+
+                if (contour.empty())
+                {
+                    return std::string("Contour is empty");
+                }
+
+                // 计算轮廓的边界矩形
+                cv::Rect bbox = cv::boundingRect(contour);
+                if (bbox.area() == 0)
+                {
+                    return std::string("Bounding box area is zero");
+                }
+
+                // 创建掩膜图像（扩展边界避免截断）
+                cv::Mat mask = cv::Mat::zeros(bbox.height + 2, bbox.width + 2, CV_8UC1);
+
+                // 平移轮廓到掩膜坐标系
+                std::vector<cv::Point> shifted_contour;
+                for (const cv::Point &pt : contour)
+                {
+                    shifted_contour.emplace_back(
+                        pt.x - bbox.x + 1, // +1 保留1像素边界
+                        pt.y - bbox.y + 1);
+                }
+
+                // 绘制填充轮廓（确保闭合）
+                cv::drawContours(
+                    mask,
+                    std::vector<std::vector<cv::Point>>{shifted_contour},
+                    0,
+                    cv::Scalar(255),
+                    cv::FILLED);
+
+                // 计算距离变换
+                cv::Mat dist;
+                cv::distanceTransform(mask, dist, cv::DIST_L2, cv::DIST_MASK_PRECISE);
+
+                // 寻找最大距离位置
+                cv::Point max_loc;
+                double max_val;
+                cv::minMaxLoc(dist, nullptr, &max_val, nullptr, &max_loc);
+
+                if (max_val <= 0)
+                {
+                    return std::string("Maximum distance not found");
+                }
+
+                // 转换回原图坐标系
+                res = cv::Point2f(
+                    static_cast<float>(max_loc.x + bbox.x - 1),
+                    static_cast<float>(max_loc.y + bbox.y - 1));
+            }
+            catch(const cv::Exception& e)
+            {
+                std::cerr << e.what() << '\n';
+                return "DBASE"+std::string(e.what());
+            }
+            
+        }
+
+            break;
         default:
 
             break;
