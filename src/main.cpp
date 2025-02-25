@@ -7,7 +7,8 @@
 #include <chrono>
 #include "ortfortcp.h"
 #include "yolov8_pose_onnx.h"
-
+#include <QtConcurrent/QtConcurrentRun>
+#include <QFutureWatcher>
 
 
 
@@ -169,7 +170,7 @@ void sam2()
     }
     sam2->setparms({.type = 1,
                     .prompt_box = {745, 695, 145, 230},
-                    .prompt_point = {700, 500}}); // 在原始图像上的box,point
+                    .prompt_point = {720, 720}}); // 在原始图像上的box,point
 
     std::string video_path = "D:/m_code/sam2_layout/OrtInference-main/assets/video/test.mkv";
     std::cout << "video_path = " << video_path << std::endl;
@@ -220,10 +221,10 @@ void sam2pic()
     auto sam2 = std::make_unique<SAM2>();
     /// 2、初始化模型参数路径
     std::vector<std::string> onnx_paths{
-        "../models/sam2/large/image_encoder.onnx",
-        "../models/sam2/large/memory_attention.onnx",
-        "../models/sam2/large/image_decoder.onnx",
-        "../models/sam2/large/memory_encoder.onnx"};
+        "../../models/sam2/large/image_encoder.onnx",
+        "../../models/sam2/large/memory_attention.onnx",
+        "../../models/sam2/large/image_decoder.onnx",
+        "../../models/sam2/large/memory_encoder.onnx"};
 
     /// 3、初始化模型
     auto r = sam2->initialize(onnx_paths, true);
@@ -240,15 +241,17 @@ void sam2pic()
     /// 4、设置prompt
     sam2->setparms({.type = 1,
                     .prompt_box = {745, 695, 145, 230},
-                    .prompt_point = {2279, 1500}}); // 在原始图像上的box,point
+                    .prompt_point = {720, 720}}); // 在原始图像上的box,point
     /// 5、加载图片
-    std::string image_path =string("C:\\Users\\zydon\\Desktop\\JH_pic\\12.5\\x\\left\\left0_20241205091330561.bmp");
+    std::string image_path =string("C:\\Users\\zydon\\Desktop\\JH_pic\\jh0216_croppedseg\\val\\images\\000_wafer.bmp");
     cv::Mat image = cv::imread(image_path);
     /// 6、推理
     auto result = sam2->inference(image);
     /// 成功推理
     if (result.index() == 0)
     {
+        std::vector<std::vector<cv::Point>> contours={sam2->output_contour};
+        cv::drawContours(image, contours, -1, cv::Scalar(0, 0, 255), 2);
         cv::namedWindow("image", cv::WINDOW_NORMAL);
         cv::imshow("image", image);
         // 结束计时
@@ -268,11 +271,183 @@ void sam2pic()
     }
 }
 
+///批量sam2
+void sam2batch(const std::string& folder_path)
+{
+    /// 1、开辟对象
+    auto sam2 = std::make_unique<SAM2>();
+
+    /// 2、初始化模型参数路径
+    std::vector<std::string> onnx_paths{
+        "../../models/sam2/large/image_encoder.onnx",
+        "../../models/sam2/large/memory_attention.onnx",
+        "../../models/sam2/large/image_decoder.onnx",
+        "../../models/sam2/large/memory_encoder.onnx"};
+
+    /// 3、初始化模型
+    auto r = sam2->initialize(onnx_paths, true);
+    if (r.index() != 0)
+    {
+        std::string error = std::get<std::string>(r);
+        std::println("错误：{}", error);
+        return;
+    }
+
+    /// 4、设置prompt
+    sam2->setparms({.type = 1,
+                    .prompt_box = {745, 695, 145, 230},
+                    .prompt_point = {720, 720}}); // 在原始图像上的box,point
+
+    /// 5、遍历文件夹中的所有.bmp文件
+    for (const auto& entry : std::filesystem::directory_iterator(folder_path))
+    {
+        if (entry.path().extension() == ".bmp")
+        {
+            std::string image_path = entry.path().string();
+            cv::Mat image = cv::imread(image_path);
+            if (image.empty())
+            {
+                std::cout << "无法读取图像: " << image_path << std::endl;
+                continue;
+            }
+
+            // 开始计时
+            auto start = std::chrono::high_resolution_clock::now();
+
+            /// 6、推理
+            auto result = sam2->inference(image);
+            /// 成功推理
+            if (result.index() == 0)
+            {
+                std::vector<std::vector<cv::Point>> contours = {sam2->output_contour};
+                cv::drawContours(image, contours, -1, cv::Scalar(0, 0, 255), 2);
+                cv::namedWindow("image", cv::WINDOW_NORMAL);
+                cv::imshow("image", image);
+                cv::waitKey(0);
+
+                // 结束计时
+                auto end = std::chrono::high_resolution_clock::now();
+                // 计算耗时
+                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+                // 打印耗时
+                std::cout << "推理耗时：" << duration << "ms" << std::endl;
+            }
+            /// 推理失败
+            else
+            {
+                std::string error = std::get<std::string>(result);
+                std::println("错误：{}", error);
+            }
+        }
+    }
+}
+
+void yolosam2batch(const std::string &folder_path){
+
+#pragma region sam2模型初始化
+
+    /// 1、开辟对象
+    auto sam2 = std::make_unique<SAM2>();
+    /// 2、初始化模型参数路径
+    std::vector<std::string> sam2onnx_paths{
+        "../../models/sam2/large/image_encoder.onnx",
+        "../../models/sam2/large/memory_attention.onnx",
+        "../../models/sam2/large/image_decoder.onnx",
+        "../../models/sam2/large/memory_encoder.onnx"};
+    /// 3、初始化模型
+    auto rsam = sam2->initialize(sam2onnx_paths, true);
+    if (rsam.index() != 0)
+    {
+        std::string error = std::get<std::string>(rsam);
+        std::println("sam intilize failed :{}", error);
+        return;
+    }
+    std::println("sam intilize done!");
+#pragma endregion
+
+#pragma region yolo模型初始化
+
+    /// 1、开辟对象
+    auto yolov10 = std::make_unique<Yolov10>();
+    /// 2、初始化模型参数路径
+    std::vector<std::string> yoloonnx_paths{"..\\..\\models\\yolov10\\yolov10m_0117.onnx"};
+    /// 3、初始化模型
+    auto ryolo = yolov10->initialize(yoloonnx_paths, true);
+    if (ryolo.index() != 0)
+    {
+        std::string error = std::get<std::string>(ryolo);
+        std::println("yolo intilize failed:{}", error);
+        return;
+    }
+    yolov10.get()->setparms({.score = 0.5f, .nms = 0.8f});
+    std::println("yolo intilize done!");
+
+#pragma endregion
+
+    /// 4、遍历文件夹中的所有.bmp文件
+    for (const auto &entry : std::filesystem::directory_iterator(folder_path))
+    {
+        if (entry.path().extension() == ".bmp")
+        {
+            std::string image_path = entry.path().string();
+            cv::Mat image = cv::imread(image_path);
+            if (image.empty())
+            {
+                std::cout << "无法读取图像: " << image_path << std::endl;
+                continue;
+            }
+
+            // 开始计时
+            auto start = std::chrono::high_resolution_clock::now();
+
+            /// 5、推理
+            auto result = yolov10.get()->inference(image);
+            /// 成功推理
+            if (result.index() == 0)
+            {
+                
+                for(auto &box:yolov10->output_boxes){
+                    //对每一个box进行->裁图->推理->画图
+                    cv::Rect normBox = [=](){
+                        int centerX = box.x + box.width / 2;
+                        int centerY = box.y + box.height / 2;
+                        int width = 1440;
+                        int height = 1440;
+                        return cv::Rect(centerX - width/2, centerY -height/2, width, height);}();
+                        cv::Mat croppedImg = image(normBox);
+
+                        sam2->setparms({.type = 0,
+                                       .prompt_box = {box.x-normBox.x,box.y-normBox.y,box.width,box.height},
+                                       .prompt_point = {720, 720}}); // 在原始图像上的box,point
+
+                        /// 6、推理
+                        auto result = sam2.get()->inference(croppedImg);
+                        /// 成功推理
+                        if (result.index() == 0)
+                        {
+                            std::vector<std::vector<cv::Point>> contours = {sam2->output_contour};
+                            cv::drawContours(croppedImg, contours, -1, cv::Scalar(0, 0, 255), 2);
+                            cv::circle(croppedImg, sam2->output_point, 5, cv::Scalar(0, 0, 255), -1);
+                            cv::namedWindow("Image", cv::WINDOW_NORMAL);
+                            cv::imshow("Image", croppedImg);
+                            cv::waitKey(0);
+                        }
+                        /// 推理失败
+                        else
+                        {
+                            std::string error = std::get<std::string>(result);
+                            std::println("错误：{}", error);
+                        }
+                }//box循环结束
+            }//yolo推理结束
+        }//判断是否是bmp
+        }//遍历文件
+}
 int yolo11_seg()
 {
 
     std::unique_ptr<Yolov8SegOnnx> yolov8seg= std::make_unique<Yolov8SegOnnx>();
-    std::string model_path_seg = "D:\\m_code\\sam2_layout\\OrtInference-main\\models\\yolo11_seg\\yolo11_seg0211.onnx";
+    std::string model_path_seg = "D:\\m_code\\sam2_layout\\OrtInference-main\\models\\yolo11_croppedseg\\jh_croppedseg0218.onnx";
     if (yolov8seg.get()->ReadModel(model_path_seg, true, 0, true))
     {
         std::cout << "yolov8seg loaded!" << std::endl;
@@ -288,7 +463,7 @@ int yolo11_seg()
     ///每个图像输出的结果
     std::vector<OutputParams> outputs;
     // list file
-    std::string folder_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\01.24\\*.bmp";
+    std::string folder_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\jh0216_croppedseg\\val\\images\\*.bmp";
     std::string output_path = "D:\\m_code\\sam2_layout\\OrtInference-main\\assets\\output\\0117\\";
 
     std::vector<cv::String> paths;
@@ -481,12 +656,10 @@ int yolo11_pose(){
 }
 
 
-int main(int argc, char *argv[])
+int main_mono(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
 
-    yolosam2();
-    return 0;
 
     std::string input;
     uint portNum{}; 
@@ -524,7 +697,7 @@ int main(int argc, char *argv[])
     }  
 
         // 提示用户输入  
-    std::cout << "please choose the model(1.segment,2.yolo detection,3.yolo segment,4.yolosam segment):";  
+    std::cout << "please choose the model(1.segment,2.yolo detection,3.yolo segment,4.yolosam segment,5.yolo_dtsg):";  
     std::getline(std::cin, input); // 从终端获取输入 
 
 
@@ -548,17 +721,34 @@ int main(int argc, char *argv[])
         // 加载检测模型的代码
           ortyolosam2fortcp(ip,portNum);
     }
+    else if (input == "5") {
+        std::cout << "load 5 ai toolkit..." << std::endl;
+        // 加载检测模型的代码
+          ortyolodtsgfortcp(ip,portNum);
+    }
     else {
         std::cout << "error input。" << std::endl;
     }
 
-  
-    // yolo11_seg();
-    
-    // yolo();
-    // yolosam();
-    // yolotrace();
-    // sam2();
-    // sam2pic();
     return a.exec();
+}
+
+
+
+int main(int argc, char *argv[]){
+    QCoreApplication a(argc, argv);
+    QString ip1{"127.0.0.1"};
+    QString ip2{"127.0.0.1"};
+    uint portNum1{8001};
+    uint portNum2{8002};
+    
+ 
+
+    QThread *th_1 = createServerThread(ip1,portNum1);
+    QThread *th_2 = createServerThread(ip2,portNum2);
+    th_1->start();
+    th_2->start();
+
+    return a.exec();
+
 }

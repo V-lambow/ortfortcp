@@ -1,20 +1,35 @@
-#include "ortfortcp.h"
-#include "Model.h"
-#include "SAM2.h"
-#include "Yolov10.h"
-#include "yolov8_seg_onnx.h"
-#include <QRegExp>
 
+#include "ortfortcp.h"
 
 /// @brief 连接的客户端数量
-static uint connectedNum =0;
 enum class SKORDER
 {
     RECEIVE_IMG =0,
     RECEIVE_POINT =1,
     TIMEOUT =2,
+    RUNNING=3,
     UNDEFINED =99
 };
+enum class MODLENAMES{
+    YOLOV10=0,
+    YOLO11_SEG=1,
+    YOLO11_POSE=2,
+    SAM2=3,
+};
+/// @brief 指令集
+static const QVector<QString> skorder={"imagein","pointin","timeout"};
+static const std::map<std::string,uint>classesDef{{"masks",0},{"wafer",1}};
+
+
+/// prompt 点收到信号
+thread_local bool isPointReceived =false;
+/// 图片收到信号
+thread_local bool isImageReceived =false;
+/// @brief 当前的指令模式
+thread_local SKORDER curOrderMode =SKORDER::UNDEFINED;
+thread_local uint connectedNum =0;
+
+// static std::mutex cout_mtx;
 
 std::vector<cv::Point2f>  keyptsFliter(std::vector<PoseKeyPoint> kpts,float conf_thres=0) noexcept{
     std::vector<cv::Point2f> res;
@@ -26,13 +41,8 @@ std::vector<cv::Point2f>  keyptsFliter(std::vector<PoseKeyPoint> kpts,float conf
     return res;
 }
 
-/// prompt 点收到信号
-static bool isPointReceived =false;
-/// 图片收到信号
-static bool isImageReceived =false;
-
 /// @brief 重置收到信号
-void resetReceived(){
+void resetReceived() noexcept{
     isImageReceived =false;
     isPointReceived =false;
     curOrderMode =SKORDER::UNDEFINED; 
@@ -60,11 +70,7 @@ bool isValidIp(const QString& ip) {
     return true;  
 } 
 
-/// @brief 指令集
-static const QVector<QString> skorder={"imagein","pointin","timeout"};
 
-/// @brief 当前的指令模式
-static SKORDER curOrderMode =SKORDER::UNDEFINED;
 
 /// @brief 将收到的二进制保存为图片
 /// @param fileByte 二进制bit流
@@ -830,11 +836,15 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
 /// @brief 从tcp信号推理结果
 /// @return 是否成功
 int ortyolosam2fortcp(QString ip, uint port)
+
 {
     /// 推理输入图片
     cv::Mat image;
-    std::map<std::string,uint>classesDef{{"masks",0},{"wafer",1}};
+    const std::map<std::string,uint>classesDef{{"masks",0},{"wafer",1}};
     std::string curObjName;
+
+    QCoreApplication::instance()->thread()->setObjectName("WorkerThread");
+    qDebug() << "Running in thread:" << QThread::currentThreadId();
 
 #pragma region sam2模型初始化
 
@@ -878,7 +888,7 @@ int ortyolosam2fortcp(QString ip, uint port)
 
 
 #pragma region 服务器初始化
-    // QString ip{"127.0.0.1"};
+
     TCPpkg::UnPack unpacktool;
     QTcpServer *server = new QTcpServer();
     server->listen(QHostAddress(ip), port);
@@ -915,11 +925,23 @@ int ortyolosam2fortcp(QString ip, uint port)
 
     QObject::connect(psocket, &QTcpSocket::readyRead, [&]()
     {
+                        ///如果状态位没有重置，说明还没有推理完成
+                         if (curOrderMode == SKORDER::RUNNING)
+                         {
+                             psocket->write("busy!");
+                             psocket->flush();
+                             psocket->waitForBytesWritten();
+                             return;
+                         }
+                         
                          auto message = psocket->readAll();
                          auto orderbyte = message.mid(0, 7);
                          auto caseidx = skorder.indexOf(orderbyte);
+
+
                          switch (caseidx)
-                         {                          
+                         { 
+                    
                          /// 转换为接收图像模式
                          case static_cast<int>(SKORDER::RECEIVE_IMG):
                          {
@@ -943,6 +965,7 @@ int ortyolosam2fortcp(QString ip, uint port)
                              {
                              case SKORDER::RECEIVE_IMG:
                              {
+                                 
                                  auto startimgRec = std::chrono::high_resolution_clock::now();
 
                                  if (unpacktool.getStoredsize() == 0)
@@ -983,6 +1006,7 @@ int ortyolosam2fortcp(QString ip, uint port)
                                      image = std::get<cv::Mat>(resimage);
                                      std::cout << "sucessed recive image: " << "height:" << image.rows << "width:" << image.cols << std::endl;
 
+                                    curOrderMode = SKORDER::RUNNING;
                                      isImageReceived = true;
                                      cv::Mat colorImage;
                                      cv::cvtColor(image, colorImage, cv::COLOR_GRAY2BGR);
@@ -1047,7 +1071,7 @@ int ortyolosam2fortcp(QString ip, uint port)
                                     int newHeight = 1440;
 
                                     // 定义 Lambda 表达式，生成新的 Rect
-                                    auto ROI_corr = [&newWidth, &newHeight,&boxChosed]()
+                                    auto ROI_corr = [=]()
                                     {
                                         int centerX = boxChosed.x + boxChosed.width / 2;
                                         int centerY = boxChosed.y + boxChosed.height / 2;
@@ -1080,6 +1104,7 @@ int ortyolosam2fortcp(QString ip, uint port)
                                     psocket->write(("result"+curObjName+","+std::to_string(sam2->output_point.x+croppedRect.x)+","+std::to_string(sam2->output_point.y+croppedRect.y)).c_str());
                                     psocket->flush();
                                     psocket->waitForBytesWritten();
+                                    std::cout<<"send point2f:"<<sam2->output_point.x+croppedRect.x<<","<<sam2->output_point.y+croppedRect.y<<std::endl;
 
                                     resetReceived();
                                     unpacktool.clear();
@@ -1101,27 +1126,25 @@ int ortyolosam2fortcp(QString ip, uint port)
    
 
     });
-    while(true){
-        QCoreApplication::processEvents();
-
-    }
+    // while(true){
+    //     QCoreApplication::processEvents();
+    // }
+    QEventLoop eventLoop;
+    eventLoop.exec();
 
     ///服务器关闭
     QObject::connect(server,&QTcpServer::destroyed,[&](){
         connectedNum=0;
+        // delete psocket;
+        // psocket=nullptr;
+        // delete server;
+        // server=nullptr;       
         qDebug()<<"current connectnum"<<connectedNum;
     });
 
+    // delete server;
+    // server=nullptr;
 
-
-
-    //    QFile file("C:\\Users\\zydon\\Pictures\\Screenshots\\cells.png");
-    //    if(file.open(QIODevice::ReadOnly))
-    //    {
-    //        QByteArray fileByte =file.readAll();
-    //        auto fileBytepacked =TCPpkg::pack(fileByte);
-    //        psocket.get()->write(fileBytepacked);
-    //    }
  return 0;
 }
 
@@ -1158,7 +1181,7 @@ int ortyolodtsgfortcp(QString ip, uint port)
     /// 1、开辟对象
     std::unique_ptr<Yolov8SegOnnx> yolov8seg;
     yolov8seg = std::make_unique<Yolov8SegOnnx>();
-    std::string model_path_seg = "../../models/yolo11_seg/yolo11_seg0211.onnx";
+    std::string model_path_seg = "../../models/yolo11_croppedseg/jh_croppedseg0218.onnx";
 
     if (yolov8seg.get()->ReadModel(model_path_seg, true, 0, true))
     {
@@ -1448,4 +1471,322 @@ int ortyolodtsgfortcp(QString ip, uint port)
     //        psocket.get()->write(fileBytepacked);
     //    }
  return 0;
+}
+
+
+bool ServerWorker::start(){
+    /// 推理输入图片
+
+
+    QCoreApplication::instance()->thread()->setObjectName("WorkerThread");
+    qDebug() << "Running in thread:" << QThread::currentThreadId();
+
+#pragma region sam2模型初始化
+
+    /// 1、开辟对象
+    m_sam2 = std::make_unique<SAM2>();
+    /// 2、初始化模型参数路径
+    std::vector<std::string> sam2onnx_paths{
+        "../../models/sam2/large/image_encoder.onnx",
+        "../../models/sam2/large/memory_attention.onnx",
+        "../../models/sam2/large/image_decoder.onnx",
+        "../../models/sam2/large/memory_encoder.onnx"};
+    /// 3、初始化模型
+    auto rsam = m_sam2->initialize(sam2onnx_paths, true);
+    if (rsam.index() != 0)
+    {
+        std::string error = std::get<std::string>(rsam);
+        std::println("sam intilize failed :{}", error);
+        //! 若模型初始化失败，直接退出线程
+        emit finished();
+        return false;
+    }
+    std::println("sam intilize done!");
+#pragma endregion
+
+#pragma region yolo模型初始化
+
+    /// 1、开辟对象
+    m_yolov10 = std::make_unique<Yolov10>();
+    /// 2、初始化模型参数路径
+    std::vector<std::string> yoloonnx_paths{"..\\..\\models\\yolov10\\yolov10m_0117.onnx"};
+    /// 3、初始化模型
+    auto ryolo = m_yolov10->initialize(yoloonnx_paths, true);
+    if (ryolo.index()!= 0)
+    {
+        std::string error = std::get<std::string>(ryolo);
+        //! 若模型初始化失败，直接退出线程
+        std::println("yolo intilize failed:{}", error);
+        emit finished();
+        return false;
+    }
+    m_yolov10.get()->setparms({.score = 0.5f,.nms = 0.8f});
+    std::println("yolo intilize done!");
+
+#pragma endregion
+
+
+#pragma region 服务器初始化
+
+    m_server = new QTcpServer(this);
+    m_server->listen(QHostAddress(m_ip), m_port);
+
+    if (m_server->isListening())
+        qDebug() << "listening  on " << m_ip << ":" << m_port;
+    else
+    {
+        qDebug() << "listening  failed: " << m_ip << ":" << m_port;
+        //! 若服务器初始化失败，直接退出线程
+        emit finished();
+    }
+#pragma endregion
+
+    /// 有新链接
+    connect(m_server, &QTcpServer::newConnection, this, &ServerWorker::handleNewConnection);
+    return true;
+
+}
+
+void ServerWorker::handleNewConnection()
+{
+
+    connectedNum++;
+    qDebug() << "current connectnum:" << connectedNum;
+
+    m_psocket = m_server->nextPendingConnection();
+    auto socketpot = m_psocket->localPort();
+
+    m_psocket->write(QString::number(socketpot).toUtf8() + "linked");
+
+    // 客户端失去连接
+    QObject::connect(m_psocket, &QTcpSocket::disconnected, [&, this]()
+                     {
+            connectedNum--;
+            qDebug()<<"current connectnum"<<connectedNum; 
+            m_psocket->deleteLater(); });
+
+    QObject::connect(m_psocket, &QTcpSocket::readyRead, [&, this]()
+                     {
+                        ///如果状态位没有重置，说明还没有推理完成
+                         if (curOrderMode == SKORDER::RUNNING)
+                         {
+                             m_psocket->write("busy!");
+                             m_psocket->flush();
+                             m_psocket->waitForBytesWritten();
+                             return;
+                         }
+                         
+                         auto message = m_psocket->readAll();
+                         auto orderbyte = message.mid(0, 7);
+                         auto caseidx = skorder.indexOf(orderbyte);
+
+
+                         switch (caseidx)
+                         { 
+                    
+                         /// 转换为接收图像模式
+                         case static_cast<int>(SKORDER::RECEIVE_IMG):
+                         {
+                             m_curObjName = std::string(message.mid(7, 5).data());
+                             qDebug() << "switch to receive image mode!";
+                             curOrderMode = SKORDER::RECEIVE_IMG;
+                             m_psocket->write("switch to receive image mode!");
+                             m_unpacktool.clear();
+                         };
+                         break;
+                         case static_cast<int>(SKORDER::TIMEOUT):
+                         {
+                             qDebug() << "time out!";
+                             resetReceived();
+                             m_psocket->write("reseted!");
+                         };
+                         break;
+                         case -1:
+                         {
+                             switch (curOrderMode)
+                             {
+                             case SKORDER::RECEIVE_IMG:
+                             {
+                                 
+                                 auto startimgRec = std::chrono::high_resolution_clock::now();
+
+                                 if (m_unpacktool.getStoredsize() == 0)
+                                 {
+                                     startimgRec = std::chrono::high_resolution_clock::now();
+                                 }
+                                //  qDebug() << "收到一条IMAGE信息";
+                                 auto unpackedret = m_unpacktool(message);
+
+                                 /// 输出
+                                 if (!unpackedret.index())
+                                 {
+
+                                     //  saveImage(std::get<QByteArray>(unpackedret));
+                                     auto endimgRec = std::chrono::high_resolution_clock::now();
+                                     auto imgRecDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endimgRec - startimgRec).count();
+                                     std::cout << "integrated image received in: " << imgRecDuration << " ms" << std::endl;
+                                     m_psocket->write("image received!");
+                                     m_psocket->flush();
+                                     m_psocket->waitForBytesWritten();
+
+                                     auto unpackedbit=std::get<QByteArray>(unpackedret);
+                                     auto resimage = QByteArr2Mat(unpackedbit);
+
+
+                                     /// 图像转流错误
+                                     if (resimage.index())
+                                     {
+                                        std::string error = std::get<std::string>(resimage);
+                                         std::cout << error << std::endl;
+                                         m_psocket->write(error.c_str());
+
+                                         //!error图像转流失败
+                                         resetReceived();
+                                         m_unpacktool.clear();
+                                         break;
+                                     }
+                                     m_image = std::get<cv::Mat>(resimage);
+                                     std::cout << "sucessed recive image: " << "height:" << m_image.rows << "width:" << m_image.cols << std::endl;
+
+                                    curOrderMode = SKORDER::RUNNING;
+                                     isImageReceived = true;
+                                     cv::Mat colorImage;
+                                     cv::cvtColor(m_image, colorImage, cv::COLOR_GRAY2BGR);
+
+                                     ///yolo计时
+                                     auto start = std::chrono::high_resolution_clock::now();
+                                     std::variant<bool,std::string> yoloRes = m_yolov10.get()->inference(colorImage);
+                                     if (yoloRes.index())
+                                     {
+                                         std::cout << "yolo inference failed"+std::get<std::string>(yoloRes) << std::endl;
+                                         m_psocket->write(("yolo inference failed:"+std::get<std::string>(yoloRes)).c_str());
+
+                                         //!error yolo推理失败
+                                         resetReceived();
+                                         m_unpacktool.clear();
+                                         break;
+                                     }
+                                     
+                                     auto end = std::chrono::high_resolution_clock::now();
+                                     // 计算耗时
+                                     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+                                     // 输出耗时
+                                     std::cout << "yolo total duration:" << duration << "ms" << std::endl;
+                                     std::vector<cv::Rect> out_boxes = m_yolov10->output_boxes;
+                                     std::cout << "find obj:" << out_boxes.size() << "(num)" << std::endl;
+                                     std::vector<cv::Point2f> out_ceters;
+                                     /// sam2计时
+                                     auto start2 = std::chrono::high_resolution_clock::now();
+                                     /// 开始sam2推理
+
+                                     //当前需要找的目标idx代号
+                                    uint classesIdx =classesDef.at(m_curObjName);
+                                    if (classesIdx>=classesDef.size()||classesIdx<0)
+                                    {
+                                        m_psocket->write("wrong order");
+                                        m_psocket->flush();
+                                        m_psocket->waitForBytesWritten();
+
+                                        //!error 目标不存在已有的label表中
+                                        resetReceived();
+                                        m_unpacktool.clear();
+                                        break;
+                                    }
+
+                                    //判断是否检测到目标
+                                    std::vector<int> detectedLabels= m_yolov10->output_labels;
+                                    auto detectedIdx =std::find(detectedLabels.begin(),detectedLabels.end(),classesIdx);
+                                    if(detectedIdx == detectedLabels.end()){
+                                        m_psocket->write("yolo not find the obj");
+                                        m_psocket->flush();
+                                        m_psocket->waitForBytesWritten();
+
+                                        //!error yolo未检测到目标
+                                        resetReceived();
+                                        m_unpacktool.clear();
+                                        break;
+                                    }
+
+                                    auto boxChosed = out_boxes[detectedIdx[0]-(classesDef.size()-detectedLabels.size())];
+                                    // 设置新矩形的宽和高
+                                    int newWidth = 1440;
+                                    int newHeight = 1440;
+
+                                    // 定义 Lambda 表达式，生成新的 Rect
+                                    auto croppedRect = [=]()
+                                    {
+                                        int centerX = boxChosed.x + boxChosed.width / 2;
+                                        int centerY = boxChosed.y + boxChosed.height / 2;
+                                        return cv::Rect(centerX - newWidth / 2, centerY - newHeight / 2, newWidth, newHeight);
+                                    }();
+                                    cv::Mat croppedImg = colorImage(croppedRect);
+
+
+
+                                    m_sam2->setparms({.type = 0, .prompt_box = {boxChosed.x-croppedRect.x,boxChosed.y-croppedRect.y,boxChosed.width,boxChosed.height}});
+                                    auto samRes = m_sam2->inference(croppedImg);
+                                    if (samRes.index())
+                                    {
+                                        std::cout << "sam2 inference failed:" + std::get<std::string>(samRes) << std::endl;
+                                        m_psocket->write(std::get<std::string>(samRes).c_str());
+
+                                        //!error sam2推理失败
+                                        resetReceived();
+                                        m_unpacktool.clear();
+                                        break;
+                                    }
+
+                                    auto end2 = std::chrono::high_resolution_clock::now();
+                                    // 计算耗时
+                                    auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - start2).count();
+                                    // 输出耗时
+                                    std::cout << "sam inference duration:" << duration2 << "ms" << std::endl;
+                                    /// 发送字符串结果
+                                    m_psocket->write(("result"+m_curObjName+","+std::to_string(m_sam2->output_point.x+croppedRect.x)+","+std::to_string(m_sam2->output_point.y+croppedRect.y)).c_str());
+                                    m_psocket->flush();
+                                    m_psocket->waitForBytesWritten();
+                                    std::cout<<"send point2f:"<<m_sam2->output_point.x+croppedRect.x<<","<<m_sam2->output_point.y+croppedRect.y<<std::endl;
+
+                                    resetReceived();
+                                    m_unpacktool.clear();
+
+                                 }
+                             };
+                             break;
+                             default:
+                             {
+                                 m_psocket->write("wrong order!");
+                             };
+                             break;
+                             }
+                         };
+                         break;
+                         } });
+
+    // while(true){
+    //     QCoreApplication::processEvents();
+    // }
+    // QEventLoop eventLoop;
+    // eventLoop.exec();
+
+    /// 服务器关闭
+    QObject::connect(m_server, &QTcpServer::destroyed, [&, this]()
+                     {
+        connectedNum=0;
+        m_psocket->deleteLater();
+        m_psocket=nullptr;
+        qDebug()<<"current connectnum"<<connectedNum; });
+}
+
+QThread* createServerThread(QString ip, quint16 port) {
+    QThread* thread = new QThread();
+    ServerWorker* worker = new ServerWorker(ip, port,nullptr);
+    
+    
+    QObject::connect(thread, &QThread::started, worker, &ServerWorker::start);
+    QObject::connect(worker, &ServerWorker::finished, thread, &QThread::quit);
+    QObject::connect(worker, &ServerWorker::finished, worker, &QObject::deleteLater);
+    QObject::connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    worker->moveToThread(thread);
+    return thread;
 }

@@ -44,8 +44,7 @@ file(GLOB SRC_FILES
 )
 
 ## 包含目录
-
-set(CMAKE_PREFIX_PATH "D:/vcpkg/installed/x64-windows/")
+set(CMAKE_PREFIX_PATH "D:/vcpkg/installed/x64-windows/;D:/code/Qt/Qt5.14.2/5.14.2/msvc2017_64/;D:/code/onnxruntime/onnxruntime-win-x64-1.18.1")
 
 # 设置 ONNXRUNTIME 库的路径
 set(ONNXRUNTIME_DIR "D:/code/onnxruntime/onnxruntime-win-x64-1.18.1")  
@@ -58,9 +57,7 @@ include_directories(${PROJECT_DIR}/include/bytetrack/include/)
 find_package(TBB REQUIRED)
 find_package(OpenCV REQUIRED)
 
-# find_package(Qt5Core REQUIRED)
-# find_package(Qt5Network REQUIRED)
-# find_package(Qt5Gui REQUIRED)
+
 
 # 设置 Qt 库的路径
 set(QT5_INCLUDE_DIRS 
@@ -69,14 +66,24 @@ set(QT5_INCLUDE_DIRS
     "D:\\code\\Qt\\Qt5.14.2\\5.14.2\\msvc2017_64\\include\\QtCore\\"
     "D:\\code\\Qt\\Qt5.14.2\\5.14.2\\msvc2017_64\\include\\QtGui\\"
     "D:\\code\\Qt\\Qt5.14.2\\5.14.2\\msvc2017_64\\include\\QtNetwork\\")
-set(QT5_LIBRARY_DIRS "D:\\code\\Qt\\Qt5.14.2\\5.14.2\\msvc2017_64\\lib")
+set(QT5_LIBRARY_DIRS 
+    "D:\\code\\Qt\\Qt5.14.2\\5.14.2\\msvc2017_64\\lib")
 set(QT5_LIBS
     "D:\\code\\Qt\\Qt5.14.2\\5.14.2\\msvc2017_64\\lib\\Qt5Core.lib"
     "D:\\code\\Qt\\Qt5.14.2\\5.14.2\\msvc2017_64\\lib\\Qt5Gui.lib"
     "D:\\code\\Qt\\Qt5.14.2\\5.14.2\\msvc2017_64\\lib\\Qt5Widgets.lib"
     "D:\\code\\Qt\\Qt5.14.2\\5.14.2\\msvc2017_64\\lib\\Qt5Network.lib")
 
+    # 添加包含和库目录  
+include_directories(${QT5_INCLUDE_DIRS})  
+link_directories(${QT5_LIBRARY_DIRS})  
+
+
+find_package(Qt5Core REQUIRED)
+find_package(Qt5Network REQUIRED)
+find_package(Qt5Gui REQUIRED)
 # find_package(onnxruntime REQUIRED)
+set(CMAKE_AUTOMOC ON)
 
 # 设置 TBB 库的路径
 set(TBB_INCLUDE_DIRS "${CMAKE_PREFIX_PATH}/include")
@@ -85,11 +92,7 @@ set(TBB_LIBRARIES "${CMAKE_PREFIX_PATH}/lib")
 # 添加头文件搜索路径
 include_directories(${ONNXRUNTIME_INCLUDE_DIR})  
 include_directories(${TBB_INCLUDE_DIRS})
-include_directories(${QT5_INCLUDE_DIRS})
-
-# 添加库文件  
 link_directories(${ONNXRUNTIME_LIB_DIR})  
-link_directories(${QT5_LIBRARY_DIRS})
 
 
 

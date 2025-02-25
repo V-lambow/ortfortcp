@@ -633,9 +633,6 @@ void SAM2::preprocess(cv::Mat &image)
 void SAM2::postprocess(std::vector<Ort::Value> &output_tensors)
 {
 
-   ///开始计时
-    // auto start = std::chrono::high_resolution_clock::now();
-
     float *output = output_tensors[0].GetTensorMutableData<float>();
     cv::Mat outimg(this->ori_img->size(), CV_32FC1, output);
     cv::Mat dst;
@@ -649,8 +646,6 @@ void SAM2::postprocess(std::vector<Ort::Value> &output_tensors)
     myutil::maxAreaContour(dst, dst2, contours);
     this->output_contour=contours[0];
 
-    // cv::namedWindow("dst",cv::WINDOW_NORMAL);
-    // cv::imshow("dst",dst2);
 
     // ///开操作[5,5]
     // cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
@@ -690,64 +685,11 @@ void SAM2::postprocess(std::vector<Ort::Value> &output_tensors)
     //     }
     //     #pragma endregion
 
-/*
-#pragma region ximgproc::lsd 检测直线最小距离范数法
-    // 角点亚像素化
-    auto subpixs = myutil::pt2SubpixPtf(*ori_img, contours[0]);
 
-    /// drawContours区域绘制
-    cv::drawContours(*ori_img, contours, -1, cv::Scalar(50, 250, 20), 2, cv::LINE_AA);
-
-    // 轮廓线图
-    cv::Mat contoursImg(ori_img->rows, ori_img->cols, CV_8UC1);
-
-    cv::drawContours(contoursImg, contours, -1, cv::Scalar(0), 1);
-
-    // cv::namedWindow("contoursImg",cv::WINDOW_NORMAL);
-    // cv::imshow("contoursImg",contoursImg);
-
-    std::vector<cv::Vec4f> lines;
-    cv::Ptr<cv::ximgproc::EdgeDrawing> ed = cv::ximgproc::createEdgeDrawing();
-    ed->params.EdgeDetectionOperator = cv::ximgproc::EdgeDrawing::LSD;
-    ed->detectEdges(contoursImg);
-    ed->detectLines(lines);
-    cv::Mat linesImg(contoursImg.size(), CV_8UC1);
-    /// 直线筛选
-    myutil::lineLenFilter(lines, [&](auto len)
-                          { return len > 5; });
-    /// 画直线
-    std::for_each(lines.begin(), lines.end(), [=](auto line)
-                  { cv::line(linesImg, cv::Point(line[0], line[1]), cv::Point(line[2], line[3]), cv::Scalar(0), 5); });
-
-    /// 求解到所有直线距离2范数最小的点
-    cv::TermCriteria criteria(cv::TermCriteria::MAX_ITER + cv::TermCriteria::EPS, 100, 1e-6); // 迭代终止条件
-    cv::Point2f optimPt = myutil::findOptimalPoint(lines, criteria);
-
-    cv::circle(linesImg, optimPt, 10, cv::Scalar(0), 5);
-
-    // cv::namedWindow("linesImg", cv::WINDOW_NORMAL);
-    // cv::imshow("linesImg", linesImg);
-
-#pragma endregion ximgproc::lsd 检测直线最小距离范数法
-
-*/
     //     //!< dzy 中心寻找及绘制
     this->centerSearch_ptr.get()->setParam({.lineMode = FitLines::fitMode::PROSAC, .cnt = 4});
 
     auto pt = this->centerSearch_ptr.get()->search_mono(contours, CenterSearch::CenterMode::DBASE);
-
-    //   auto contourMerged = FitLines::mergeContours(contours);
-    //   auto contoursDivided = FitLines::kMeansClustering(contourMerged,4);
-    //   for(size_t i=0;i<contoursDivided.size();i++){
-    //     auto contourTmp = contoursDivided.at(i);
-    //     std::for_each(contourTmp.begin(),contourTmp.end(),[=](auto p){ cv::circle(*ori_img,p,1,generateRandomScalar());});
-    //   }
-
-    /// 绘制contours
-    // std::for_each(contours.at(0).begin(),contours.at(0).end(),[=](auto p){ cv::circle(*ori_img,p,1,cv::Scalar(50,10,255));});
-
-    // auto ptr_CPsearch = std::make_unique<CenterSearch>(contours, CenterSearch::CenterMode::PBASE);
-    // auto pt = ptr_CPsearch->search();
 
     /// 报错
     if (pt.index() == 1)
@@ -762,12 +704,6 @@ void SAM2::postprocess(std::vector<Ort::Value> &output_tensors)
 
         cv::circle(*ori_img, point, 3, cv::Scalar(50, 250, 200), 3);
     }
-
-    // ///结束计时
-    // auto end = std::chrono::high_resolution_clock::now();
-    // /// 计算耗时
-    // auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    // std::cout << "sam后处理耗时：" << duration << " ms" << std::endl;
 }
 
 int SAM2::setparms(ParamsSam2 parms)

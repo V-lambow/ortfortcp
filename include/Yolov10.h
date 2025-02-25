@@ -36,8 +36,11 @@ public:
     int setparms(ParamsV10 parms);
     std::variant<bool,std::string> initialize(std::vector<std::string>& onnx_paths, bool is_cuda) override;
     std::variant<bool,std::string> inference(cv::Mat &image) override;
+    std::variant<bool,std::string> prewarm_model() ;
+    cv::Mat drawBoxes(std::vector<int>indices,std::vector<int>labels,std::vector<float>scores,std::vector<cv::Rect>boxes);
 
     void outputClear();
+    cv::Mat output_img{};
     std::vector<cv::Point2f> output_point{};
     std::vector<int> output_labels{};
     std::vector<cv::Rect> output_boxes{};

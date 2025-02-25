@@ -89,8 +89,80 @@ std::variant<bool,std::string> Yolov10::initialize(std::vector<std::string>& onn
         this->output_nodes.push_back(node);
     }
     //************************************************
+    // 预热模型
+    if (auto result = this->prewarm_model(); !std::holds_alternative<bool>(result)) {
+        return "Model prewarm failed!";
+    }  
+    //*******************************************
     this->is_inited = true;
     std::println("initialize ok!!");
+    return true;
+}
+
+std::variant<bool,std::string> Yolov10::prewarm_model() {
+        // 预热推理逻辑（在设置 is_inited 前执行）
+    try {
+        std::vector<Ort::Value> input_tensors;
+        std::vector<std::unique_ptr<float[]>> dummy_buffers; // 智能指针管理内存
+
+        // 遍历所有输入节点构造预热数据
+        for (const auto& input_node : this->input_nodes) {
+            // 处理动态维度（替换负值为1）
+            std::vector<int64_t> warmup_dims;
+            for (auto dim : input_node.dim) {
+                warmup_dims.push_back(dim < 0 ? 1 : dim);
+            }
+
+            // 计算输入元素数量
+            size_t num_elements = 1;
+            for (auto dim : warmup_dims)
+                num_elements *= dim;
+
+            // 创建并填充0值数据
+            auto dummy_data = std::make_unique<float[]>(num_elements);
+            std::fill(dummy_data.get(), dummy_data.get() + num_elements, 0.0f);
+
+            // 创建Tensor并保留数据指针
+            Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(
+                OrtArenaAllocator, OrtMemTypeDefault
+            );
+            input_tensors.emplace_back(Ort::Value::CreateTensor<float>(
+                memory_info,
+                dummy_data.get(),
+                num_elements,
+                warmup_dims.data(),
+                warmup_dims.size()
+            ));
+            dummy_buffers.push_back(std::move(dummy_data)); // 转移所有权
+        }
+
+        // 提取输入输出名称
+        std::vector<const char*> input_names;
+        for (const auto& node : this->input_nodes)
+            input_names.push_back(node.name);
+        
+        std::vector<const char*> output_names;
+        for (const auto& node : this->output_nodes)
+            output_names.push_back(node.name);
+
+        // 执行预热推理
+        Ort::RunOptions run_options;
+        auto output_tensors = this->session->Run(
+            run_options,
+            input_names.data(),
+            input_tensors.data(),
+            input_tensors.size(),
+            output_names.data(),
+            output_names.size()
+        );
+
+        std::println("Warmup inference completed.");
+
+    } catch (const std::exception& e) {
+         //预热失败返回错误
+        std::println("Warmup inference failed: {}", e.what());
+        return std::format("Warmup inference failed: {}", e.what());
+    }
     return true;
 }
 
@@ -212,22 +284,7 @@ void Yolov10::postprocess(std::vector<Ort::Value> &output_tensors){
     
     //*****************************************************
     // draw boxes
-    for(const auto i:indices){
-        std::string name = LABEL.at(labels[i]);
-        std::size_t hash = std::hash<std::string>{}(name);
-        double r = (hash & 0xFF0000) >> 16;
-        double g = (hash & 0x00FF00) >> 8;
-        double b = hash & 0x0000FF;
-        ///**************************************************
-        output_boxes.push_back(boxes[i]);
-        output_labels.push_back(labels[i]);
-
-        ///**************************************************
-        cv::rectangle(*ori_img,cv::Rect{boxes[i].x,boxes[i].y-20,boxes[i].width,20},cv::Scalar{25,255,188},-1);
-        cv::rectangle(*ori_img,boxes[i],cv::Scalar{b,g,r},2);
-        cv::putText(*ori_img,std::format("{}:{:.2f}",name,scores[i]),cv::Point{boxes[i].x,boxes[i].y-5}
-        ,1,1.5,cv::Scalar{b,g,r},2);
-    }
+    this->output_img = drawBoxes(indices,labels,scores,boxes);
     // 按名称排序
     sortBoxesByNames(output_labels,output_boxes);
 
@@ -258,4 +315,25 @@ void Yolov10::sortBoxesByNames(std::vector<int>& names, std::vector<cv::Rect>& b
         boxes.push_back(pair.second);
     }
 }
+cv::Mat Yolov10::drawBoxes(std::vector<int> indices, std::vector<int> labels, std::vector<float> scores, std::vector<cv::Rect> boxes)
+{
+    // draw boxes
+    cv::Mat paintImg = (*ori_img).clone();
+    for (const auto i : indices)
+    {
+        std::string name = LABEL.at(labels[i]);
+        std::size_t hash = std::hash<std::string>{}(name);
+        double r = (hash & 0xFF0000) >> 16;
+        double g = (hash & 0x00FF00) >> 8;
+        double b = hash & 0x0000FF;
+        ///**************************************************
+        output_boxes.push_back(boxes[i]);
+        output_labels.push_back(labels[i]);
 
+        ///**************************************************
+        cv::rectangle(paintImg, cv::Rect{boxes[i].x, boxes[i].y - 20, boxes[i].width, 20}, cv::Scalar{25, 255, 188}, -1);
+        cv::rectangle(paintImg, boxes[i], cv::Scalar{b, g, r}, 2);
+        cv::putText(paintImg, std::format("{}:{:.2f}", name, scores[i]), cv::Point{boxes[i].x, boxes[i].y - 5}, 1, 1.5, cv::Scalar{b, g, r}, 2);
+    }
+    return paintImg;
+}
