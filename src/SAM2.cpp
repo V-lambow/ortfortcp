@@ -291,10 +291,12 @@ std::variant<bool, std::string> SAM2::inference(cv::Mat &image)
     auto &img_encoder_out = std::get<0>(result_0); // pix_feat,high_res_feat0,high_res_feat1,vision_feats,vision_pos_embed
 
     //******************************mem_attention*********************************
+ 
     auto result_1 = this->mem_attention_infer(img_encoder_out);
     if (result_1.index() != 0)
         return std::get<std::string>(result_1);
     auto &mem_attention_out = std::get<0>(result_1); // image_embed
+
 
     //*****************************img_decoder**********************************
     mem_attention_out.push_back(std::move(img_encoder_out[1])); // high_res_feat0
@@ -315,6 +317,9 @@ std::variant<bool, std::string> SAM2::inference(cv::Mat &image)
     }
     //*******************************mem_encoder******************************
     std::vector<Ort::Value> mem_encoder_in;
+
+    //? disable mem_encoder
+    if(this->parms.is_mem_attention){
     mem_encoder_in.push_back(std::move(img_decoder_out[1])); // mask_for_mem
     mem_encoder_in.push_back(std::move(img_encoder_out[0])); // pix_feat
     auto result_3 = this->mem_encoder_infer(mem_encoder_in);
@@ -328,6 +333,9 @@ std::variant<bool, std::string> SAM2::inference(cv::Mat &image)
     temp.maskmem_pos_enc.push_back(std::move(mem_encoder_out[1]));
     temp.temporal_code.push_back(std::move(mem_encoder_out[2]));
     infer_status.status_recent.push(std::move(temp));
+    }
+    //? end 
+
     //***************************************************************
     // 后处理
     std::vector<Ort::Value> output_tensors;
@@ -393,8 +401,9 @@ std::variant<std::vector<Ort::Value>, std::string> SAM2::mem_attention_infer(std
     for (auto &node : this->mem_attention_output_nodes)
         output_names.push_back(node.name);
     std::vector<Ort::Value> mem_attention_out;
-    if (infer_status.current_frame == 0) [[unlikely]]
+    if (infer_status.current_frame == 0 || this->parms.is_mem_attention==false) /*[[unlikely]]*/
     {
+        mem_attention_out.clear();
         mem_attention_out.push_back(std::move(img_encoder_out[3]));
         return mem_attention_out;
     }
@@ -685,7 +694,7 @@ void SAM2::postprocess(std::vector<Ort::Value> &output_tensors)
     //     }
     //     #pragma endregion
 
-
+    
     //     //!< dzy 中心寻找及绘制
     this->centerSearch_ptr.get()->setParam({.lineMode = FitLines::fitMode::PROSAC, .cnt = 4});
 

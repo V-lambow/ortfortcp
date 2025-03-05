@@ -22,6 +22,7 @@ struct InferenceStatus{
     yo::FixedSizeQueue<Ort::Value,BUFFER_SIZE> obj_ptr_recent;
 };
 struct ParamsSam2{
+    bool is_mem_attention = true;
     uint type = 0; // 0使用box，1使用point
     cv::Rect prompt_box;
     cv::Point prompt_point;
@@ -95,4 +96,6 @@ public:
 
     //模型输出轮廓
     std::vector<cv::Point> output_contour{};
+
+
 };

@@ -115,19 +115,23 @@ double myutil::angleBetweenThreePoints(const cv::Point &a, const cv::Point &b, c
     // 返回角度（弧度转为度）
     return std::acos(cosAngle) * (180.0 / CV_PI);
 }
-    void myutil::lineLenFilter(std::vector<cv::Vec4f>& lines,std::function<bool(float)>lenthreshold){
-        std::vector<cv::Vec4f> res;  
 
-        for (auto line : lines) {  
-            float x1 = line[0], y1 = line[1], x2 = line[2], y2 = line[3];  
-            auto len = cv::norm(cv::Point2f(x1, y1) - cv::Point2f(x2, y2));  
-            if (lenthreshold(len)) {  
-                res.push_back(line); // 添加符合条件的线段到结果中  
-            }  
-        }  
+void myutil::lineLenFilter(std::vector<cv::Vec4f> &lines, std::function<bool(float)> lenthreshold)
+{
+    std::vector<cv::Vec4f> res;
 
-        lines = res; // 用新过滤过的线段替换原有的线段 vector  
+    for (auto line : lines)
+    {
+        float x1 = line[0], y1 = line[1], x2 = line[2], y2 = line[3];
+        auto len = cv::norm(cv::Point2f(x1, y1) - cv::Point2f(x2, y2));
+        if (lenthreshold(len))
+        {
+            res.push_back(line); // 添加符合条件的线段到结果中
+        }
     }
+
+    lines = res; // 用新过滤过的线段替换原有的线段 vector
+}
 
 // 找到最优点  
 cv::Point2f myutil::findOptimalPoint(const std::vector<cv::Vec4f>& lines, const cv::TermCriteria& criteria){  
@@ -260,3 +264,56 @@ std::vector<cv::Point> myutil::cvptf2cvpt(const std::vector<cv::Point2f> &ptfs){
     return pts;
 
 }
+//cv:mat croppedImg = src(cv::Rect()); 安全版本
+cv::Mat myutil::safeCrop(const cv::Mat& colorImage, cv::Rect croppedRect) {
+
+    // 调整Rect的宽高为正数
+    if (croppedRect.width < 0) {
+        croppedRect.x += croppedRect.width;
+        croppedRect.width = -croppedRect.width;
+    }
+    if (croppedRect.height < 0) {
+        croppedRect.y += croppedRect.height;
+        croppedRect.height = -croppedRect.height;
+    }
+
+    // 创建目标图像，初始化为全黑
+    cv::Mat croppedImg(croppedRect.height, croppedRect.width, colorImage.type(), cv::Scalar(0, 0, 0));
+
+    // 原图的边界
+    cv::Rect imageRect(0, 0, colorImage.cols, colorImage.rows);
+    // 计算实际相交区域
+    cv::Rect actualRect = croppedRect & imageRect;
+
+    if (actualRect.area() > 0) {
+        // 计算目标图像中的偏移量
+        int xOffset = actualRect.x - croppedRect.x;
+        int yOffset = actualRect.y - croppedRect.y;
+
+        // 目标图像中的复制区域
+        cv::Rect destRect(xOffset, yOffset, actualRect.width, actualRect.height);
+
+        // 确保目标区域在范围内
+        if (destRect.x >= 0 && destRect.y >= 0 &&
+            destRect.x + destRect.width <= croppedImg.cols &&
+            destRect.y + destRect.height <= croppedImg.rows) 
+        {
+            // 复制有效区域到目标图像
+            colorImage(actualRect).copyTo(croppedImg(destRect));
+        }
+    }
+
+    return croppedImg;
+}
+
+
+
+std::string myutil::getCurrentDate() {  
+    auto now = std::chrono::system_clock::now();  
+    std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);  
+    std::tm now_tm = *std::localtime(&now_time_t);  
+    
+    std::ostringstream oss;  
+    oss << std::put_time(&now_tm, "%Y-%m-%d"); // 格式化为 YYYY-MM-DD  
+    return oss.str();  
+}  

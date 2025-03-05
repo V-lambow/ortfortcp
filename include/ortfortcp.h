@@ -25,6 +25,9 @@
 
 #include "tcp_package.hpp"
 #include "yolov8_seg_onnx.h"
+#include "myutil.h"
+#include "spdlog/spdlog.h"
+#include "spdlog/sinks/basic_file_sink.h"
 
 void saveImage(const QByteArray &fileByte);
 int ortsam2fortcp(QString ip,uint port);
@@ -49,7 +52,9 @@ class ServerWorker : public QObject {
     Q_OBJECT
 public:
     ServerWorker(QString ip, quint16 port, QObject* parent = nullptr) 
-        : QObject(parent), m_ip(ip), m_port(port) {}
+        : QObject(parent), m_ip(ip), m_port(port) {
+            m_curThread_id = getCurThreadId();
+        }
     ~ServerWorker()
     {
         if (m_server)
@@ -73,7 +78,7 @@ signals:
 
 private slots:
     void handleNewConnection();
-
+    std::string getCurThreadId();
 
 
 private:
@@ -86,6 +91,7 @@ private:
     QTcpSocket *m_psocket = nullptr;
     std::unique_ptr<SAM2>m_sam2;
     std::unique_ptr<Yolov10>m_yolov10;
+    std::string m_curThread_id;
 
 };
 QThread* createServerThread(QString ip, quint16 port) ;

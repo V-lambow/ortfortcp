@@ -82,6 +82,7 @@ link_directories(${QT5_LIBRARY_DIRS})
 find_package(Qt5Core REQUIRED)
 find_package(Qt5Network REQUIRED)
 find_package(Qt5Gui REQUIRED)
+find_package(spdlog REQUIRED)
 # find_package(onnxruntime REQUIRED)
 set(CMAKE_AUTOMOC ON)
 
@@ -107,6 +108,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME} TBB::tbb)
 target_link_libraries(${CMAKE_PROJECT_NAME} ${ONNXRUNTIME_LIB_DIR}/onnxruntime.lib)
 target_link_libraries(${CMAKE_PROJECT_NAME} ${OpenCV_LIBRARIES})
 target_link_libraries(${CMAKE_PROJECT_NAME} ${QT5_LIBS})
+target_link_libraries(${CMAKE_PROJECT_NAME} spdlog::spdlog)
 
 install(
     TARGETS ${CMAKE_PROJECT_NAME}

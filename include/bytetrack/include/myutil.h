@@ -44,6 +44,11 @@ namespace myutil
     std::vector<cv::Point2f> cvpt2cvptf(const std::vector<cv::Point> &pts);
     
     std::vector<cv::Point> cvptf2cvpt(const std::vector<cv::Point2f> &ptfs);
+
+    cv::Mat safeCrop(const cv::Mat& colorImage, cv::Rect croppedRect);
+
+    std::string getCurrentDate();
+
 }
 
 

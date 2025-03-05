@@ -15,7 +15,7 @@
 void yolo()
 {
     auto yolov10 = std::make_unique<Yolov10>();
-    std::vector<std::string> onnx_paths{"..\\..\\models\\yolov10\\yolov10m_0117.onnx"};
+    std::vector<std::string> onnx_paths{"..\\..\\models\\yolov10\\yolov10m_0226.onnx"};
     auto r = yolov10->initialize(onnx_paths, true);
     if (r.index() != 0)
     {
@@ -26,7 +26,7 @@ void yolo()
     yolov10->setparms({.score = 0.5f, .nms = 0.8f});
 
     //list file
-    std::string folder_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\01.24\\*.bmp";
+    std::string folder_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\jh0217_dectect\\train\\images\\*.bmp";
     std::string output_path = "D:\\m_code\\sam2_layout\\OrtInference-main\\assets\\output\\0117\\";
 
     std::vector<cv::String> paths;
@@ -42,12 +42,13 @@ void yolo()
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
         std::println("yolo inference duration = {}ms", duration);
+        cv::Mat& resImg=yolov10->output_img;
         if (result.index() == 0)
         {
             auto filename = std::filesystem::path(path).filename().string();
-            cv::imwrite(output_path + filename, image);
+            cv::imwrite(output_path + filename, resImg);
             cv::namedWindow("Image", cv::WINDOW_NORMAL);
-            cv::imshow("Image", image);
+            cv::imshow("Image", resImg);
             cv::waitKey(0);
         }
         else
@@ -733,22 +734,27 @@ int main_mono(int argc, char *argv[])
     return a.exec();
 }
 
-
-
-int main(int argc, char *argv[]){
+int main(int argc, char *argv[])
+{
     QCoreApplication a(argc, argv);
+
     QString ip1{"127.0.0.1"};
     QString ip2{"127.0.0.1"};
     uint portNum1{8001};
     uint portNum2{8002};
-    
- 
 
-    QThread *th_1 = createServerThread(ip1,portNum1);
-    QThread *th_2 = createServerThread(ip2,portNum2);
+    QObject::connect(&a, &QCoreApplication::aboutToQuit, [&]()
+                     {
+        // 调用 spdlog 清理函数
+        spdlog::shutdown(); });
+
+    // yolo();
+    // return 0;
+
+    QThread *th_1 = createServerThread(ip1, portNum1);
+    QThread *th_2 = createServerThread(ip2, portNum2);
     th_1->start();
     th_2->start();
 
     return a.exec();
-
 }
