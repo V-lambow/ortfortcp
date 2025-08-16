@@ -44,3 +44,5 @@ YOLOv10：https://github.com/THU-MIG/yolov10
 SAM2Export：https://github.com/Aimol-l/SAM2Export
 
 SAM2：https://github.com/facebookresearch/segment-anything-2
+Aimol-l: https://github.com/Aimol-l/OrtInference
+UNeedCryDear: https://github.com/UNeedCryDear/yolov8-opencv-onnxruntime-cpp
