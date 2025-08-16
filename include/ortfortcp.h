@@ -35,17 +35,14 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id);
 int ortyolosam2fortcp(QString ip, uint port);
 void resetReceived() noexcept;
 bool isValidIp(const QString& ip);
-cv::Mat QImage2cvMat(QImage image);
+cv::Mat QImage2cvMat(QImage&& image);
 std::variant<cv::Point, std::string> QByteArr2cvPt(const QByteArray &byteArray);
-std::variant<cv::Mat, std::string> QByteArr2Mat(const QByteArray &byteArray);
+std::variant<cv::Mat, std::string> QByteArr2Mat(QByteArray&& byteArray);
 template<typename _Tp>
 int yolov8_onnx(_Tp& task, cv::Mat& img, std::string& model_path);
 std::vector<cv::Point2f>  keyptsFliter(std::vector<PoseKeyPoint> kpts,float conf_thres) noexcept;
 int ortyolodtsgfortcp(QString ip, uint port);
 
-class Aa:public QObject{
-    Q_OBJECT
-};
 
 //tcp封装线程
 class ServerWorker : public QObject {
@@ -84,7 +81,6 @@ private slots:
 private:
     QString m_ip;
     quint16 m_port;
-    cv::Mat m_image;
     std::string m_curObjName;
     TCPpkg::UnPack m_unpacktool;
     QTcpServer *m_server = nullptr;
@@ -95,5 +91,9 @@ private:
 
 };
 QThread* createServerThread(QString ip, quint16 port) ;
+
+
+
+
 
 #endif

@@ -9,13 +9,15 @@
 #include "yolov8_pose_onnx.h"
 #include <QtConcurrent/QtConcurrentRun>
 #include <QFutureWatcher>
+#include "mainserver.h"
 
 
 
-void yolo()
+void yolo(std::string onnx_path, std::string folder_path)
+
 {
     auto yolov10 = std::make_unique<Yolov10>();
-    std::vector<std::string> onnx_paths{"..\\..\\models\\yolov10\\yolov10m_0226.onnx"};
+    std::vector<std::string> onnx_paths{onnx_path};
     auto r = yolov10->initialize(onnx_paths, true);
     if (r.index() != 0)
     {
@@ -26,11 +28,11 @@ void yolo()
     yolov10->setparms({.score = 0.5f, .nms = 0.8f});
 
     //list file
-    std::string folder_path = "C:\\Users\\zydon\\Desktop\\JH_pic\\jh0217_dectect\\train\\images\\*.bmp";
-    std::string output_path = "D:\\m_code\\sam2_layout\\OrtInference-main\\assets\\output\\0117\\";
+    std::string file_list = folder_path+"\\*.bmp";
+    std::string output_path = "..\\assets\\output\\001";
 
     std::vector<cv::String> paths;
-    cv::glob(folder_path, paths, false);
+    cv::glob(file_list, paths, false);
 
     for (const auto &path : paths)
     {
@@ -45,7 +47,7 @@ void yolo()
         cv::Mat& resImg=yolov10->output_img;
         if (result.index() == 0)
         {
-            auto filename = std::filesystem::path(path).filename().string();
+            std::string filename = std::filesystem::path(path).filename().string();
             cv::imwrite(output_path + filename, resImg);
             cv::namedWindow("Image", cv::WINDOW_NORMAL);
             cv::imshow("Image", resImg);
@@ -734,27 +736,63 @@ int main_mono(int argc, char *argv[])
     return a.exec();
 }
 
+int main_mult(int argc, char *argv[])
+{
+    QCoreApplication a(argc, argv);
+    try
+    {
+        QString ip1{"127.0.0.1"};
+        QString ip2{"127.0.0.1"};
+        uint portNum1{8001};
+        uint portNum2{8002};
+
+        QObject::connect(&a, &QCoreApplication::aboutToQuit, [&]()
+                         {
+        // 调用 spdlog 清理函数
+        spdlog::shutdown(); });
+
+        // yolo();
+        // return 0;
+
+        QThread *th_1 = createServerThread(ip1, portNum1);
+        QThread *th_2 = createServerThread(ip2, portNum2);
+        th_1->start();
+        th_2->start();
+
+        return a.exec();
+    }
+    catch (const std::exception &e)
+    {
+        qCritical() << "Server fatal error:" << e.what();
+        return EXIT_FAILURE;
+    }
+}
+
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
 
-    QString ip1{"127.0.0.1"};
-    QString ip2{"127.0.0.1"};
-    uint portNum1{8001};
-    uint portNum2{8002};
-
-    QObject::connect(&a, &QCoreApplication::aboutToQuit, [&]()
-                     {
-        // 调用 spdlog 清理函数
-        spdlog::shutdown(); });
-
-    // yolo();
-    // return 0;
-
-    QThread *th_1 = createServerThread(ip1, portNum1);
-    QThread *th_2 = createServerThread(ip2, portNum2);
-    th_1->start();
-    th_2->start();
-
-    return a.exec();
+    try {
+        // 创建主服务器
+        MainServer server;
+        
+        // 启动服务器（示例参数）
+        QString ip = "127.0.0.1";  // 监听所有IP
+        quint16 port = 8001;
+        server.startServer(ip, port);
+        
+        // 保持事件循环运行
+        return a.exec();
+    } catch (const std::exception& e) {
+        qCritical() << "Server fatal error:" << e.what();
+        return EXIT_FAILURE;
+    }
 }
+
+
+// int main(){
+//     std::string onnx_path = "C:\\Users\\zydon\\Desktop\\diamond\\weights\\jh0623_diamond.onnx";
+//     std::string folder_path = "C:\\Users\\zydon\\Desktop\\diamond\\train\\images";
+//     yolo(onnx_path, folder_path);
+//     return 0;
+// }

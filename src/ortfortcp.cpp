@@ -30,6 +30,7 @@ thread_local bool isImageReceived =false;
 /// @brief 当前的指令模式
 thread_local SKORDER curOrderMode =SKORDER::UNDEFINED;
 thread_local uint connectedNum =0;
+thread_local std::chrono::steady_clock::time_point startimgRec;
 
 // static std::mutex cout_mtx;
 
@@ -116,7 +117,7 @@ std::variant<cv::Point,std::string> QByteArr2cvPt(QByteArray& byteArray) {
     return cv::Point(x, y);  
 }
 
-std::variant<cv::Mat, std::string> QByteArr2Mat(QByteArray& byteArray)
+std::variant<cv::Mat, std::string> QByteArr2Mat(QByteArray&& byteArray)
 {   
     QImage image;
     if (!image.loadFromData(byteArray))
@@ -124,27 +125,22 @@ std::variant<cv::Mat, std::string> QByteArr2Mat(QByteArray& byteArray)
         return "Failed to load QImage from QByteArray.";
     }
     // image.save("C:\\Users\\zydon\\Pictures\\Screenshots\\cellscopy.png");
-    cv::Mat mat = QImage2cvMat(image);
+    cv::Mat mat = QImage2cvMat(std::move(image));
     if (mat.empty())
     {
         return "The image to convert to cv::Mat is empty.";
     }
 
-    // cv::namedWindow("QByteArr2Mat");
-    // cv::imshow("QByteArr2Mat", mat);
-    // cv::waitKey(0);
-
-    // cv::Mat res = mat.clone();
-
-
     return mat;
     
 }
 
-cv::Mat QImage2cvMat(QImage image)
+cv::Mat QImage2cvMat(QImage&& image)
 {
-    cv::Mat mat;
-    qDebug() << image.format();
+    cv::Mat mat{};
+
+    // qDebug() << image.format();
+
     switch(image.format())
     {
     case QImage::Format_ARGB32:
@@ -175,10 +171,8 @@ cv::Mat QImage2cvMat(QImage image)
     default:
         break;
     }
-    //到这步没有问题
-
-
-    cv::Mat res = mat.clone();
+    cv::Mat res;
+    mat.copyTo(res);
     return res;
 }
 
@@ -272,6 +266,7 @@ int ortsam2fortcp(QString ip, uint port)
 
     QObject::connect(psocket, &QTcpSocket::readyRead, [&]()
     {
+        std::chrono::steady_clock::time_point startimgRec;
                          auto message = psocket->readAll();
 
                          QDataStream os(message);
@@ -312,10 +307,6 @@ int ortsam2fortcp(QString ip, uint port)
                              {
                              case SKORDER::RECEIVE_IMG:
                              {
-                               
-                                auto startimgRec = std::chrono::high_resolution_clock::now();
-                                
-
                                 if (unpacktool.getStoredsize() == 0)
                                 {
                                     startimgRec = std::chrono::high_resolution_clock::now();
@@ -338,7 +329,7 @@ int ortsam2fortcp(QString ip, uint port)
                                      psocket->waitForBytesWritten();
 
                                      auto unpackedbit=std::get<QByteArray>(unpackedret);
-                                     auto resimage = QByteArr2Mat(unpackedbit);
+                                     auto resimage = QByteArr2Mat(std::move(unpackedbit));
 
                                      /// 图像转流错误
                                      if (resimage.index())
@@ -501,7 +492,8 @@ int ortsam2fortcp(QString ip, uint port)
  return 0;
 }
 
-int ortyolofortcp(QString ip,uint portNumint ,int model_id){
+int ortyolofortcp(QString ip, uint portNumint, int model_id)
+{
     /// 推理输入图片
     cv::Mat image;
     std::unique_ptr<Yolov10> yolov10;
@@ -509,7 +501,7 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
     std::map<std::string, uint> classesDef{{"masks", 0}, {"wafer", 1}};
     std::string curObjName;
     std::unique_ptr<CenterSearch> centerSearch_ptr = std::make_unique<CenterSearch>();
-    std::chrono::steady_clock::time_point startimgRec ;
+    std::chrono::steady_clock::time_point startimgRec;
     /// 设置模式
     centerSearch_ptr->m_mode = CenterSearch::CenterMode::DBASE;
 
@@ -519,7 +511,7 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
 #pragma region yolo模型初始化
 
         yolov10 = std::make_unique<Yolov10>();
-        std::vector<std::string> onnx_paths{"D:\\m_code\\sam2_layout\\OrtInference-main\\models\\yolov10\\yolov10s.onnx"};
+        std::vector<std::string> onnx_paths{"D:\\m_code\\sam2_layout\\OrtInference-main\\models\\yolov10\\jh0311_dectectcircle.onnx"};
         auto r = yolov10->initialize(onnx_paths, true);
         if (r.index() != 0)
         {
@@ -548,16 +540,17 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
             return 1;
         }
     }
-    else{
-    std::println("error:{}","wrong model id");
-    return 1;
-}
-
+    else
+    {
+        std::println("error:{}", "wrong model id");
+        return 1;
+    }
 
 #pragma region 服务器初始化
     // QString ip{"127.0.0.1"};
     quint16 port = portNumint;
     TCPpkg::UnPack unpacktool;
+    std::variant<QByteArray, QString> unpackedret;
     QTcpServer *server = new QTcpServer();
     server->listen(QHostAddress(ip), port);
     QTcpSocket *psocket = nullptr;
@@ -570,30 +563,27 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
     }
 #pragma endregion
 
-
- /// 有新链接
+    /// 有新链接
     QObject::connect(server, &QTcpServer::newConnection, [&]()
                      {
                          connectedNum++;
                          qDebug() << "current connectnum:" << connectedNum;
 
-                         
                          psocket = server->nextPendingConnection();
                          auto socketpot = psocket->localPort();
 
                          psocket->write(QString::number(socketpot).toUtf8() + "linked");
-                    
 
-    /// 客户端失去连接
-    QObject::connect(psocket, &QTcpSocket::disconnected, [&]()
-                     {
+                         /// 客户端失去连接
+                         QObject::connect(psocket, &QTcpSocket::disconnected, [&]()
+                                          {
             connectedNum--;
             qDebug()<<"current connectnum:"<<connectedNum; 
             psocket->deleteLater(); });
 
-    /// 客户端状态信号回复
-    QObject::connect(psocket, &QTcpSocket::stateChanged, [&]()
-                     {
+                         /// 客户端状态信号回复
+                         QObject::connect(psocket, &QTcpSocket::stateChanged, [&]()
+                                          {
             auto state =   psocket->state();
             switch (state) {
 
@@ -611,8 +601,8 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
             }
             psocket->write("socket will close later"); });
 
-    QObject::connect(psocket, &QTcpSocket::readyRead, [&]()
-    {
+                         QObject::connect(psocket, &QTcpSocket::readyRead, [&]()
+                                          {
                          auto message = psocket->readAll();
                          auto orderbyte = message.mid(0, 7);
                          auto caseidx = skorder.indexOf(orderbyte);
@@ -626,6 +616,10 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
                              curOrderMode = SKORDER::RECEIVE_IMG;
                              psocket->write("switch to receive image mode!");
                              unpacktool.clear();
+                             if (message.size() > 13)
+                             {
+                                 unpacktool(message.mid(12));
+                             }
                          };
                          break;
                          case static_cast<int>(SKORDER::TIMEOUT):
@@ -648,7 +642,7 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
                                      startimgRec = std::chrono::high_resolution_clock::now();
                                  }
                                 //  qDebug() << "收到一条IMAGE信息";
-                                 auto unpackedret = unpacktool(message);
+                                 unpackedret = unpacktool(message);
 
                                  /// 输出
                                  if (!unpackedret.index())
@@ -662,7 +656,7 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
                                      psocket->flush();
                                      psocket->waitForBytesWritten();
 
-                                     auto resimage = QByteArr2Mat(std::get<QByteArray>(unpackedret));
+                                     auto resimage = QByteArr2Mat(std::move(std::get<QByteArray>(unpackedret)));
 
                                      /// 图像转流错误
                                      if (resimage.index())
@@ -673,6 +667,7 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
                                          break;
                                      }
                                      image = std::get<cv::Mat>(resimage);
+                                     cv::cvtColor(image, image, cv::COLOR_GRAY2BGR);
                                      isImageReceived = true;
 
                                      /// 5、加载图片
@@ -695,12 +690,8 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
                              }
                          };
                          break;
-                         }
+                         } });
                      });
-
-   
-
-    });
     // 满足条件时进行推理
     while (true)
     {
@@ -710,44 +701,63 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
         {
             continue;
         }
-    // 开始计时
-            auto start = std::chrono::high_resolution_clock::now();
+        // 开始计时
+        auto start = std::chrono::high_resolution_clock::now();
 
-            if (model_id == 2)
+        if (model_id == 2)
+        {
+            // cv::namedWindow("image", cv::WINDOW_NORMAL);
+            // cv::imshow("image", image);
+            // cv::waitKey(0);
+            /// 6、推理
+            auto result = yolov10->inference(image);
+            /// 成功推理
+            if (result.index() == 0)
             {
+
                 // cv::namedWindow("image", cv::WINDOW_NORMAL);
                 // cv::imshow("image", image);
                 // cv::waitKey(0);
-                /// 6、推理
-                auto result = yolov10->inference(image);
-                /// 成功推理
-                if (result.index() == 0)
+                auto pts = yolov10->output_point;
+                // 没找到目标
+                if (pts.size() <= 0)
                 {
-
-                    cv::namedWindow("image", cv::WINDOW_NORMAL);
-                    cv::imshow("image", image);
-                    auto pts = yolov10->output_point;
-
-                    QByteArray resos = vecpts2QByteArr(pts);
-                    psocket->write(resos);
-
-                    // 结束计时
-                    auto end = std::chrono::high_resolution_clock::now();
-                    // 计算耗时
-                    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-                    // 输出耗时
-                    std::cout << "total inference duration:" << duration << "ms" << std::endl;
+                    psocket->write("wafer not found!");
+                    psocket->flush();
+                    psocket->waitForBytesWritten();
+                    resetReceived();
+                    continue;
                 }
-                /// 推理失败
-                else
-                {
-                    std::string error = std::get<std::string>(result);
 
-                    std::println("error :{}", error);
-                    psocket->write(("inference failed!"+error).c_str());
-                }
-                resetReceived();
+                auto wafercenter = pts[0];
+                psocket->write(("resultwafer," + std::to_string(wafercenter.x) + "," +
+                                std::to_string(wafercenter.y))
+                                   .c_str());
+                psocket->flush();
+                psocket->waitForBytesWritten();
+
+                // QByteArray resos = vecpts2QByteArr(pts);
+                // psocket->write(resos);
+
+                // 结束计时
+                auto end = std::chrono::high_resolution_clock::now();
+                // 计算耗时
+                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+                // 输出耗时
+                std::cout << "total inference duration:" << duration << "ms" << std::endl;
             }
+            /// 推理失败
+            else
+            {
+                std::string error = std::get<std::string>(result);
+
+                std::println("error :{}", error);
+                psocket->write(("inference failed!" + error).c_str());
+                psocket->flush();
+                psocket->waitForBytesWritten();
+            }
+            resetReceived();
+        }
         // yolov8 onnxruntime segment
         else if (model_id == 3)
         {
@@ -757,7 +767,7 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
             /// 成功推理
             if (yolov8seg->OnnxDetect(colorImage, outputs))
             {
-                cv::Point2f out_point{0.0f,0.0f};
+                cv::Point2f out_point{0.0f, 0.0f};
                 std::for_each(outputs.begin(), outputs.end(), [=, &out_point, &centerSearch_ptr](auto output)
                               {
                     //不是要找的目标
@@ -783,13 +793,14 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
                             psocket->waitForBytesWritten();
                             //不能break
                         }
-                    } 
-                    });
-                    if(out_point.x==0.0f&&out_point.y==0.0f){
-                        psocket->write(std::string("result"+curObjName+"not found!").c_str());
-                        psocket->flush();
-                        psocket->waitForBytesWritten();
-                    }
+                    } });
+                //! 中心计算失败
+                if (out_point.x == 0.0f && out_point.y == 0.0f)
+                {
+                    psocket->write(std::string("result" + curObjName + "not found!").c_str());
+                    psocket->flush();
+                    psocket->waitForBytesWritten();
+                }
 
                 unpacktool.clear();
 
@@ -799,7 +810,7 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
                 // 输出耗时
                 std::cout << "total inference duration:" << duration << "ms" << std::endl;
             }
-            /// 推理失败
+            //! 推理失败
             else
             {
 
@@ -809,21 +820,14 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
                 psocket->waitForBytesWritten();
             }
             resetReceived();
-
         }
-    } 
+    }
 
-
-
-    ///服务器关闭
-    QObject::connect(server,&QTcpServer::destroyed,[&](){
+    /// 服务器关闭
+    QObject::connect(server, &QTcpServer::destroyed, [&]()
+                     {
         connectedNum=0;
-        qDebug()<<"current connectnum:"<<connectedNum;
-    });
-
-
-
-
+        qDebug()<<"current connectnum:"<<connectedNum; });
     //    QFile file("C:\\Users\\zydon\\Pictures\\Screenshots\\cells.png");
     //    if(file.open(QIODevice::ReadOnly))
     //    {
@@ -831,9 +835,8 @@ int ortyolofortcp(QString ip,uint portNumint ,int model_id){
     //        auto fileBytepacked =TCPpkg::pack(fileByte);
     //        psocket.get()->write(fileBytepacked);
     //    }
- return 0;
+    return 0;
 }
-
 
 /// @brief 从tcp信号推理结果
 /// @return 是否成功
@@ -990,7 +993,7 @@ int ortyolosam2fortcp(QString ip, uint port)
                                      psocket->waitForBytesWritten();
 
                                      auto unpackedbit=std::get<QByteArray>(unpackedret);
-                                     auto resimage = QByteArr2Mat(unpackedbit);
+                                     auto resimage = QByteArr2Mat(std::move(unpackedbit));
 
 
                                      /// 图像转流错误
@@ -1284,7 +1287,7 @@ int ortyolodtsgfortcp(QString ip, uint port)
                                      psocket->waitForBytesWritten();
 
                                      auto unpackedbit=std::get<QByteArray>(unpackedret);
-                                     auto resimage = QByteArr2Mat(unpackedbit);
+                                     auto resimage = QByteArr2Mat(std::move(unpackedbit));
 
 
                                      /// 图像转流错误
@@ -1576,6 +1579,10 @@ void ServerWorker::handleNewConnection()
 
     QObject::connect(m_psocket, &QTcpSocket::readyRead, [&, this]()
                      {
+                        if (m_psocket->bytesAvailable() <= 0){
+                        return;
+                     }
+
                         ///如果状态位没有重置，说明还没有推理完成
                          if (curOrderMode == SKORDER::RUNNING)
                          {
@@ -1621,8 +1628,6 @@ void ServerWorker::handleNewConnection()
                              {
                              case SKORDER::RECEIVE_IMG:
                              {
-                                 
-                                 auto startimgRec = std::chrono::high_resolution_clock::now();
 
                                  if (m_unpacktool.getStoredsize() == 0)
                                  {
@@ -1645,29 +1650,28 @@ void ServerWorker::handleNewConnection()
                                      m_psocket->waitForBytesWritten();
 
                                      auto unpackedbit=std::get<QByteArray>(unpackedret);
-                                     auto resimage = QByteArr2Mat(unpackedbit);
-
+                                     auto resimage = QByteArr2Mat(std::move(unpackedbit));
 
                                      /// 图像转流错误
                                      if (resimage.index())
                                      {
-                                        std::string error = std::get<std::string>(resimage);
+                                         std::string error = std::get<std::string>(resimage);
                                          std::cout << error << std::endl;
                                          m_psocket->write(error.c_str());
 
-                                         //!error图像转流失败
+                                         //! error图像转流失败
                                          logger->error(m_curThread_id + "image transfrom failed");
                                          resetReceived();
                                          m_unpacktool.clear();
                                          break;
                                      }
-                                     m_image = std::get<cv::Mat>(resimage);
-                                     std::cout << "sucessed recive image: " << "height:" << m_image.rows << "width:" << m_image.cols << std::endl;
+                                     cv::Mat monoimage = std::get<cv::Mat>(resimage);
+                                     std::cout << "sucessed recive image: " << "height:" << monoimage.rows << "; width:" << monoimage.cols << std::endl;
 
-                                    curOrderMode = SKORDER::RUNNING;
+                                     curOrderMode = SKORDER::RUNNING;
                                      isImageReceived = true;
                                      cv::Mat colorImage;
-                                     cv::cvtColor(m_image, colorImage, cv::COLOR_GRAY2BGR);
+                                     cv::cvtColor(std::move(monoimage), colorImage, cv::COLOR_GRAY2BGR);
 
                                      ///yolo计时
                                      auto start = std::chrono::high_resolution_clock::now();
@@ -1820,3 +1824,7 @@ std::string ServerWorker::getCurThreadId() {
     oss << threadId;  
     return oss.str();  
 }  
+
+
+
+

@@ -7,6 +7,7 @@
 #include <opencv2/opencv.hpp>
 #include <algorithm>
 #include <numeric> 
+#include <variant>
 namespace myutil
 {
     /// select_shape_std
@@ -48,6 +49,7 @@ namespace myutil
     cv::Mat safeCrop(const cv::Mat& colorImage, cv::Rect croppedRect);
 
     std::string getCurrentDate();
+
 
 }
 

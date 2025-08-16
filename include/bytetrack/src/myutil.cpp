@@ -306,9 +306,8 @@ cv::Mat myutil::safeCrop(const cv::Mat& colorImage, cv::Rect croppedRect) {
     return croppedImg;
 }
 
-
-
 std::string myutil::getCurrentDate() {  
+
     auto now = std::chrono::system_clock::now();  
     std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);  
     std::tm now_tm = *std::localtime(&now_time_t);  
@@ -317,3 +316,4 @@ std::string myutil::getCurrentDate() {
     oss << std::put_time(&now_tm, "%Y-%m-%d"); // 格式化为 YYYY-MM-DD  
     return oss.str();  
 }  
+
