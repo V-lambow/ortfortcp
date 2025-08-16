@@ -1,5 +1,8 @@
 # 通过tcp通讯推理图片，内容部分参考Aimol-l/OrtInference和UNeedCryDear/yolov8-opencv-onnxruntime-cpp
+
 使用 C++和onnxruntime框架进行多种任务的推理。
+
+main分支是一个方便测试的版本，use_one_port是一个比较完善的版本。
 
 目前完成：
  + YoloV10 目标检测
