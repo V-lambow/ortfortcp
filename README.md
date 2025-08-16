@@ -1,8 +1,10 @@
-# OrtInference
+# 通过tcp通讯推理图片，内容部分参考Aimol-l/OrtInference和UNeedCryDear/yolov8-opencv-onnxruntime-cpp
 使用 C++和onnxruntime框架进行多种任务的推理。
 
 目前完成：
  + YoloV10 目标检测
+ + Yolo11 pose检测
+ + Yolo11 seg检测
  + YoloV10 + SAM 检测出目标并进行分割出mask
  + YoloV10 + ByteTrack 视频中多目标跟踪
  + SAM2 视频的目标跟踪分割
