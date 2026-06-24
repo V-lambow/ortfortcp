@@ -1,7 +1,8 @@
 #include "model_base.h"
+#include <io.h>
 
 
-std::optional<std::string> ModelBase::setClassesList(std::string classesPath){
+std::optional<std::string> yo::ModelBase::setClassesList(std::string classesPath){
     std::ifstream file(classesPath);
     if (!file.is_open())
     {
@@ -16,7 +17,7 @@ std::optional<std::string> ModelBase::setClassesList(std::string classesPath){
     return std::nullopt;
 }
 
-std::variant<std::string,std::string> ModelBase::getClassName(int index){
+std::string yo::ModelBase::getClassName(int index){
     if (index < 0 || index >= m_classesList.size())
     {
         return "error: index out of range";
@@ -24,7 +25,7 @@ std::variant<std::string,std::string> ModelBase::getClassName(int index){
     return m_classesList.at(index);
 }
 
-std::optional<std::string> ModelBase::CheckNetSize(int netHeight, int netWidth, const int* netStride, int strideSize) {
+std::optional<std::string> yo::ModelBase::CheckNetSize(int netHeight, int netWidth, const int* netStride, int strideSize) {
 	if (netHeight % netStride[strideSize - 1] != 0 || netWidth % netStride[strideSize - 1] != 0)
 	{
 		return "error: _netHeight and _netWidth must be multiple of max stride";
@@ -32,7 +33,7 @@ std::optional<std::string> ModelBase::CheckNetSize(int netHeight, int netWidth, 
 	return std::nullopt;
 }
 
-std::optional<std::string> ModelBase::CheckPath(std::string path) {
+std::optional<std::string> yo::ModelBase::CheckPath(std::string path) {
 	if (0 != _access(path.c_str(), 0)) {
 		return "error: path does not exist,  please check " + path;   
 	}
@@ -41,7 +42,7 @@ std::optional<std::string> ModelBase::CheckPath(std::string path) {
 }
 
 
-void resizeAndPadImg(const cv::Mat& image, cv::Mat& outImage, cv::Vec4d& params, const cv::Size& newShape,
+void yo::resizeAndPadImg(const cv::Mat& image, cv::Mat& outImage, cv::Vec4d& params, const cv::Size& newShape,
 	bool autoShape, bool scaleFill, bool scaleUp, int stride, const cv::Scalar& color)
 {
 	 // 获取原始图像尺寸

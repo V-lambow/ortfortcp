@@ -23,7 +23,6 @@
 #include <onnxruntime_cxx_api.h>
 #include <variant>
 #include <opencv2/ximgproc.hpp>
-#include "centerSearch.hpp"
 #include "linesfit.hpp"
 #include "myutil.h"
 #include <fstream>
@@ -73,14 +72,14 @@ namespace yo
     {
     public:
         virtual ~ModelBase() {};
-        virtual std::optional<std::string> inference(cv::Mat &image) = 0;
-        virtual std::optional<std::string> initialize(std::vector<std::string> &onnx_paths, bool is_cuda) = 0;
+        virtual std::variant<bool,std::string> inference(cv::Mat &image) = 0;
+        virtual std::variant<bool,std::string> initialize(std::vector<std::string> &onnx_paths, bool is_cuda) = 0;
 
     protected:
         virtual void preprocess(cv::Mat &image) = 0;
         virtual void postprocess(std::vector<Ort::Value> &output_tensors) = 0;
         virtual std::optional<std::string> setClassesList(std::string classesPath);
-        virtual std::variant<std::string,std::string> getClassName(int index);
+        virtual std::string getClassName(int index);
         virtual std::optional<std::string> CheckPath(std::string path);
         virtual std::optional<std::string> CheckNetSize(int netHeight, int netWidth, const int* netStride, int strideSize);
 

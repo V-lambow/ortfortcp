@@ -39,7 +39,8 @@ public:
     std::variant<bool,std::string> inference(cv::Mat &image) override;
     std::variant<bool,std::string> prewarm_model() ;
 
-    cv::Mat drawMarkers();
+    void outputClear();
+    cv::Mat drawMarkers(std::vector<int> indices, std::vector<int> labels, std::vector<float> scores, std::vector<cv::Rect> boxes);
 
     std::vector<yo::OutputParams> m_outputs{};
     std::vector<cv::Rect> output_boxes{};
