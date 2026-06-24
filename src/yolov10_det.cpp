@@ -223,6 +223,14 @@ std::variant<bool,std::string> Yolov10::inference(cv::Mat &image){
     return true;
 }
 
+void Yolov10::outputClear(){
+    m_outputs.clear();
+    output_boxes.clear();
+    output_labels.clear();
+    output_point.clear();
+    m_output_params.clear();
+}
+
 void Yolov10::preprocess(cv::Mat &image){\
     // 1. 直接resize
     // 2. 图像padding

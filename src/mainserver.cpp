@@ -25,7 +25,9 @@ void MainServer::incomingConnection(qintptr socketDescriptor)
 // 3. 修改 ClientHandler 构造函数
 ClientHandler::ClientHandler(QTcpSocket *socket, QObject *parent)
     : QObject(nullptr), // 显式设置无父对象
-      m_socket(socket)
+      m_socket(socket),
+      m_sam(nullptr),
+      m_yolo(nullptr)
 {
     m_socket->moveToThread(this->thread());
 
