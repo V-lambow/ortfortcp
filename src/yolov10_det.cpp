@@ -1,8 +1,12 @@
-#include "Yolov10.h"
+#include "yolov10_det.h"
 #include <chrono>
-int Yolov10::setparms(ParamsV10 parms){
+bool Yolov10::setparms(Params parms){
+    //判断在不在0-1
+    if (parms.score < 0 || parms.score > 1 || parms.nms < 0 || parms.nms > 1) {
+        return false;
+    }
     this->parms = std::move(parms);
-    return 1;
+    return true;
 }
 
 std::variant<bool,std::string> Yolov10::initialize(std::vector<std::string>& onnx_paths, bool is_cuda){
@@ -40,9 +44,9 @@ std::variant<bool,std::string> Yolov10::initialize(std::vector<std::string>& onn
         mbstowcs(p, onnx_path.c_str(), len); // 转换
         std::wstring wstr(p);
         delete[] p; // 释放申请的内存
-        session = new Ort::Session(env, wstr.c_str(), this->session_options);
+        session = std::make_unique<Ort::Session>(env, wstr.c_str(), this->session_options);
 #else
-        session = new Ort::Session(env, (const char*)onnx_path.c_str(), this->session_options);
+        session = std::make_unique<Ort::Session>(env, (const char*)onnx_path.c_str(), this->session_options);
 #endif
     }catch (const std::exception& e) {
         return std::format("Failed to load model. Please check your onnx file!");
@@ -242,13 +246,18 @@ void Yolov10::preprocess(cv::Mat &image){\
 }
 
 void Yolov10::postprocess(std::vector<Ort::Value> &output_tensors){
-        std::vector<float> scores{};
+    
+    std::vector<float> scores{};
     std::vector<int> labels{};
     std::vector<cv::Rect> boxes{};
     float* output = output_tensors[0].GetTensorMutableData<float>(); // 1*300*6
     auto net_w = (float)this->input_nodes[0].dim.at(3); // 1024
     auto net_h = (float)this->input_nodes[0].dim.at(2); // 1024
     float scale = std::min(net_w/ori_img->cols,net_h/ori_img->rows);
+
+    int res_num = this->output_nodes[0].dim[1]/this->output_nodes[0].dim[2];
+    m_output_params.clear();
+    m_output_params.reserve(res_num);
 
     for(size_t index = 0;index < this->output_nodes[0].dim[1]; index +=this->output_nodes[0].dim[2]){
         auto x1 = output[index];
@@ -267,6 +276,7 @@ void Yolov10::postprocess(std::vector<Ort::Value> &output_tensors){
         y2 = (y2 - pad_h) / scale;
 
         cv::Rect rect(cv::Point2f(x1,y1),cv::Size2f(x2-x1,y2-y1));
+        m_output_params.emplace_back(yo::OutputParams{.id=label,.confidence=score,.box=rect});
         boxes.emplace_back(rect);
         labels.emplace_back(label);
         scores.emplace_back(score);
@@ -275,27 +285,30 @@ void Yolov10::postprocess(std::vector<Ort::Value> &output_tensors){
     //*****************************************************
     std::vector<int>indices;
     cv::dnn::NMSBoxes(boxes,scores,this->parms.score,this->parms.nms,indices);
-    
+    m_output_params.resize(indices.size());
 
-    ///box中心点
-    for(const auto& i:indices){
-        output_point.push_back({(float)boxes[i].x+(float)boxes[i].width/2,(float)boxes[i].y+(float)boxes[i].height/2});   
+    for(int i = 0;i<indices.size();i++){
+        int index = indices[i];
+        m_output_params[index].id = labels[index];
+        m_output_params[index].confidence = scores[index];
+        m_output_params[index].box = boxes[index];
     }
     
+
+    
+    if(!indices.empty()||this->m_isDraw){
+        return;
+    }
+    if(this->m_isDraw){
     //*****************************************************
     // draw boxes
-    this->output_img = drawBoxes(indices,labels,scores,boxes);
+    this->output_img = drawMarkers(indices,labels,scores,boxes);
     // 按名称排序
     sortBoxesByNames(output_labels,output_boxes);
 
+    }
 }
 
-
-void Yolov10::outputClear(){
-    this->output_point.clear();
-    this->output_labels.clear();
-    this->output_boxes.clear();
-}
 
 void Yolov10::sortBoxesByNames(std::vector<int>& names, std::vector<cv::Rect>& boxes){
     assert(names.size() == boxes.size());
@@ -315,13 +328,13 @@ void Yolov10::sortBoxesByNames(std::vector<int>& names, std::vector<cv::Rect>& b
         boxes.push_back(pair.second);
     }
 }
-cv::Mat Yolov10::drawBoxes(std::vector<int> indices, std::vector<int> labels, std::vector<float> scores, std::vector<cv::Rect> boxes)
+cv::Mat Yolov10::drawMarkers(std::vector<int> indices, std::vector<int> labels, std::vector<float> scores, std::vector<cv::Rect> boxes)
 {
     // draw boxes
     cv::Mat paintImg = (*ori_img).clone();
     for (const auto i : indices)
     {
-        std::string name = LABEL.at(labels[i]);
+        std::string name = m_classesList.at(labels[i]);
         std::size_t hash = std::hash<std::string>{}(name);
         double r = (hash & 0xFF0000) >> 16;
         double g = (hash & 0x00FF00) >> 8;

@@ -5,27 +5,19 @@
 #include <QTcpSocket>
 #include <QTcpServer>
 #include <QDebug>
-#include <QFile>
 #include <QByteArray>
 #include <QThread>
 #include <QImage>
 #include <variant>
-#include <QTimer>
-#include <QElapsedTimer>
 #include <opencv2/opencv.hpp>
 
-#include "Model.h"
-#include "SAM2.h"
-#include "Yolov10.h"
-#include "yolov8_seg_onnx.h"
+#include "model_base.h"
+#include "sam2.h"
+#include "yolov10_det.h"
 #include <QObject>
-#include <QRegExp>
 
 #include "tcp_package.hpp"
-#include "yolov8_seg_onnx.h"
 #include "myutil.h"
-#include "spdlog/spdlog.h"
-#include "spdlog/sinks/basic_file_sink.h"
 #include <QThreadPool>
 #include <QPointer>
 
@@ -133,7 +125,7 @@ public:
         QObject::connect(handler, &ClientHandler::processingFinished, &loop, &QEventLoop::quit);
 
         // 直接调用而非跨线程 invoke
-        QMetaObject::invokeMethod(handler, &ClientHandler::startProcessing, Qt::DirectConnection);
+        QMetaObject::invokeMethod(handler, &ClientHandler::startProcessing, Qt::QueuedConnection);
 
         loop.exec();
 

@@ -147,7 +147,7 @@ int Yolov8PoseOnnx::Preprocessing(const std::vector<cv::Mat>& srcImgs, std::vect
 		cv::Vec4d temp_param = {1,1,0,0};
 		if (temp_img.size() != input_size) {
 			cv::Mat borderImg;
-			LetterBox(temp_img, borderImg, temp_param, input_size, false, false, true, 32);
+			resizeAndPadImg(temp_img, borderImg, temp_param, input_size, false, false, true, 32);
 			//std::cout << borderImg.size() << std::endl;
 			outSrcImgs.push_back(borderImg);
 			params.push_back(temp_param);

@@ -1,6 +1,9 @@
 #ifndef _LINESFIT_HPP_
 #define _LINESFIT_HPP_
 
+
+//分发式
+
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include <iostream>

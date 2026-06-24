@@ -1,9 +1,9 @@
 #pragma once
-#include "Model.h"
+#include "model_base.h"
 #include <fstream>
 #include <print>
 
-class Yolov10SAM:public yo::Model{
+class Yolov10SAM:public yo::ModelBase{
 
 struct ParamsSam{
     float score = 0.5f;

@@ -12,13 +12,6 @@
 
 
 
-// #define EXPORT_API
-// #ifdef EXPORT_API
-// #define EXPORT_DLL __declspec(dllexport)
-// #else
-// #define EXPORT_DLL __declspec(dllimport)
-// #endif
-
 class FitLines
 {
     using Linef = std::pair<cv::Point2f, cv::Point2f>;
@@ -43,7 +36,13 @@ public:
         m_contours = {};
         for (const auto &contourf : contours2f)
         {
-            m_contours.emplace_back(myutil::cvptf2cvpt(contourf));
+            std::vector<cv::Point>contour;
+            m_contours.emplace_back(std::transform(contourf.begin(), contourf.end(), \
+                        std::back_inserter(contour),
+                           [](const cv::Point2f &p)
+                           { return cv::Point2f(p.x, p.y); }));
+            
+            
         }
     }
     // 析构函数

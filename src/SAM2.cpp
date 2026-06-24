@@ -1,4 +1,4 @@
-#include "SAM2.h"
+#include "sam2.h"
 
 std::variant<bool, std::string> SAM2::initialize(std::vector<std::string> &onnx_paths, bool is_cuda)
 {
@@ -80,15 +80,15 @@ std::variant<bool, std::string> SAM2::initialize(std::vector<std::string> &onnx_
 
         delete[] p_img_encoder, p_mem_attention, p_img_decoder, p_mem_encoder; // 释放申请的内存
 
-        img_encoder_session = new Ort::Session(img_encoder_env, wstr_img_encoder.c_str(), this->img_encoder_options);
-        mem_attention_session = new Ort::Session(mem_attention_env, wstr_mem_attention.c_str(), this->mem_attention_options);
-        img_decoder_session = new Ort::Session(img_decoder_env, wstr_img_decoder.c_str(), this->img_decoder_options);
-        mem_encoder_session = new Ort::Session(mem_encoder_env, wstr_mem_encoder.c_str(), this->mem_encoder_options);
+        img_encoder_session = std::make_unique<Ort::Session>(img_encoder_env, wstr_img_encoder.c_str(), this->img_encoder_options);
+        mem_attention_session = std::make_unique<Ort::Session>(mem_attention_env, wstr_mem_attention.c_str(), this->mem_attention_options);
+        img_decoder_session = std::make_unique<Ort::Session>(img_decoder_env, wstr_img_decoder.c_str(), this->img_decoder_options);
+        mem_encoder_session = std::make_unique<Ort::Session>(mem_encoder_env, wstr_mem_encoder.c_str(), this->mem_encoder_options);
 #else
-        img_encoder_session = new Ort::Session(img_encoder_env, (const char *)onnx_paths[0].c_str(), this->img_encoder_options);
-        mem_attention_session = new Ort::Session(mem_attention_env, (const char *)onnx_paths[1].c_str(), this->mem_attention_options);
-        img_decoder_session = new Ort::Session(img_decoder_env, (const char *)onnx_paths[2].c_str(), this->img_decoder_options);
-        mem_encoder_session = new Ort::Session(mem_encoder_env, (const char *)onnx_paths[3].c_str(), this->mem_encoder_options);
+        img_encoder_session = std::make_unique<Ort::Session>(img_encoder_env, (const char *)onnx_paths[0].c_str(), this->img_encoder_options);
+        mem_attention_session = std::make_unique<Ort::Session>(mem_attention_env, (const char *)onnx_paths[1].c_str(), this->mem_attention_options);
+        img_decoder_session = std::make_unique<Ort::Session>(img_decoder_env, (const char *)onnx_paths[2].c_str(), this->img_decoder_options);
+        mem_encoder_session = std::make_unique<Ort::Session>(mem_encoder_env, (const char *)onnx_paths[3].c_str(), this->mem_encoder_options);
 #endif
     }
     catch (const std::exception &e)

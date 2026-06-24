@@ -1,10 +1,9 @@
 #pragma once
-#include "Model.h"
+#include "model_base.h"
 #include <fstream>
+#include <memory>
 
-
-
-class  SAM2:public yo::Model{
+class  SAM2:public yo::ModelBase{
 
 
 
@@ -46,10 +45,10 @@ private:
     Ort::Env mem_encoder_env = Ort::Env(ORT_LOGGING_LEVEL_WARNING,"mem_encoder");
 
     //onnx会话配置相关
-	Ort::Session* img_encoder_session = nullptr;
-	Ort::Session* img_decoder_session = nullptr;
-	Ort::Session* mem_attention_session = nullptr;
-    Ort::Session* mem_encoder_session = nullptr;
+	std::unique_ptr<Ort::Session> img_encoder_session;
+	std::unique_ptr<Ort::Session> img_decoder_session;
+	std::unique_ptr<Ort::Session> mem_attention_session;
+    std::unique_ptr<Ort::Session> mem_encoder_session;
 
     //options
 	Ort::SessionOptions img_encoder_options = Ort::SessionOptions();
@@ -77,15 +76,10 @@ protected:
     std::variant<std::vector<Ort::Value>,std::string> mem_attention_infer(std::vector<Ort::Value>&);
     std::variant<std::vector<Ort::Value>,std::string> mem_encoder_infer(std::vector<Ort::Value>&);
 public:
-    SAM2(){};
-    SAM2(const SAM2&) = delete;// 删除拷贝构造函数
-    SAM2& operator=(const SAM2&) = delete;// 删除赋值运算符
-    ~SAM2(){
-        if (img_encoder_session != nullptr) delete img_encoder_session;
-		if (img_decoder_session != nullptr) delete img_decoder_session;
-		if (mem_attention_session != nullptr) delete mem_attention_session;
-        if (mem_encoder_session != nullptr) delete mem_encoder_session;
-    };
+    SAM2() = default;
+    SAM2(const SAM2&) = delete;
+    SAM2& operator=(const SAM2&) = delete;
+    ~SAM2() = default;
     int setparms(ParamsSam2 parms);
     void setFitParms(CenterSearch::LinesFitParams parms);
     std::variant<bool,std::string> initialize(std::vector<std::string>& onnx_paths, bool is_cuda) override ;

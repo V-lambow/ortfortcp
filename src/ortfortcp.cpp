@@ -719,6 +719,7 @@ int ortyolofortcp(QString ip, uint portNumint, int model_id)
                 // cv::imshow("image", image);
                 // cv::waitKey(0);
                 auto pts = yolov10->output_point;
+                
                 // 没找到目标
                 if (pts.size() <= 0)
                 {

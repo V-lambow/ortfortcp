@@ -74,28 +74,6 @@ myutil::Circled myutil::calCircled(const std::vector<cv::Point2f> &contour)
     return Circled{cv::Point2f(a, b_center), radius};
 }
 
-std::pair<double, cv::Point2f> myutil::dist_P2Circle(const cv::Point2f &p, const Circled &circle)
-{
-    double distance = std::abs(cv::norm(p - circle.center) - circle.radius);
-
-    // 计算最近的圆上点
-    cv::Point2f closestPoint;
-    if (distance == 0)
-    {
-        closestPoint = p; // 点在圆上
-    }
-    else
-    {
-        cv::Vec2f direction = (p - circle.center) / cv::norm(p - circle.center); // 归一化的方向向量
-
-        // 手动计算圆上的点
-        closestPoint.x = circle.center.x + direction[0] * circle.radius; // x坐标
-        closestPoint.y = circle.center.y + direction[1] * circle.radius; // y坐标
-    }
-
-    return std::make_pair(distance, closestPoint); // 返回距离和最近的点
-}
-
 // 计算由三点 A、B、C 形成的角度 ∠ABC
 double myutil::angleBetweenThreePoints(const cv::Point &a, const cv::Point &b, const cv::Point &c)
 {
@@ -133,77 +111,6 @@ void myutil::lineLenFilter(std::vector<cv::Vec4f> &lines, std::function<bool(flo
     lines = res; // 用新过滤过的线段替换原有的线段 vector
 }
 
-// 找到最优点  
-cv::Point2f myutil::findOptimalPoint(const std::vector<cv::Vec4f>& lines, const cv::TermCriteria& criteria){  
-    // 初始点位置（可以是所有线段的中点）  
-    cv::Point2f optimalPoint(0, 0);  
-    for (const auto& line : lines) {  
-        optimalPoint += cv::Point2f((line[0] + line[2]) / 2, (line[1] + line[3]) / 2);  
-    }  
-    optimalPoint *= (1.0f / lines.size());  
-
-      // 动态步长  
-    float stepSize = 5.0f;  // 初始步长  
-    float shrinkFactor = 0.5f; // 步长缩小因子  
-
-    // 设置初始条件  
-    double minDistance = totalDist(optimalPoint, lines);  
-    cv::Point2f bestPoint = optimalPoint;  
-
-    // 开始迭代  
-    for (int count = 0; count < criteria.maxCount; count++) {  
-        bool improved = false;  
-
-        // 搜索周围邻域  
-        for (float dx = -stepSize; dx <= stepSize; dx += stepSize) {  
-            for (float dy = -stepSize; dy <= stepSize; dy += stepSize) {  
-                // 排除中心点的情况  
-                if (dx == 0 && dy == 0) continue;  
-
-                cv::Point2f newPoint = optimalPoint + cv::Point2f(dx, dy);  
-                double newDistance = totalDist(newPoint, lines);  
-
-                // 如果新的点距离小于当前最优点，更新最优点  
-                if (newDistance < minDistance) {  
-                    minDistance = newDistance;  
-                    bestPoint = newPoint;  
-                    improved = true;  
-                }  
-            }  
-        }  
-
-        // 更新当前点  
-        optimalPoint = bestPoint;  
-
-        // 如果没有找到更优解，停止迭代  
-        if (!improved) {  
-            break; 
-            std::cout << "没有找到更优解,当前迭代次数：" << count << "步长："<<stepSize<<std::endl; 
-        }  
-
-        // 如果达到精度条件，停止迭代  
-        if (minDistance < criteria.epsilon) {  
-            std::cout << "达到精度条件，当前迭代次数：" << count << "步长："<<stepSize<<std::endl; 
-            break;  
-        }  
-
-        // 动态缩小步长，适应更精细的搜索  
-        stepSize *= shrinkFactor;   
-    }  
-    std::cout << "迭代结束，当前步长："<<stepSize<<std::endl; 
-    return bestPoint;  
-}  
-
-double myutil::totalDist(cv::Point2f  pt, const std::vector<cv::Vec4f>& lines)
-{
-    std::vector<double> distances;
-    for (const auto& line : lines) 
-    {
-        double dictance = myutil::dist_P2Line(pt,line);
-        distances.push_back(pow(dictance,2));
-    }
-    return sqrt(std::accumulate(distances.begin(), distances.end(), 0.0));
-}
 
 double myutil::dist_P2Line(const cv::Point2f &p, const cv::Vec4f &line){
    // 直线的两个点  
@@ -216,8 +123,8 @@ double myutil::dist_P2Line(const cv::Point2f &p, const cv::Vec4f &line){
     double C = A * p1.x + B * p1.y; // Ax + By = C  
 
     // 使用垂直距离的公式  
-    double distance = std::abs(A * p.x + B * p.y - C) / std::sqrt(A * A + B * B);  
-    return distance;  
+    return  std::abs(A * p.x + B * p.y - C) / std::sqrt(A * A + B * B);  
+
 }
 
 std::vector<cv::Point2f> myutil::cvpt2cvptf(const std::vector<cv::Point> &pts)
@@ -231,39 +138,6 @@ std::vector<cv::Point2f> myutil::cvpt2cvptf(const std::vector<cv::Point> &pts)
     return points2f;
 }
 
-std::vector<cv::Point2f> myutil::pt2SubpixPtf(cv::Mat src, std::vector<cv::Point> pts)
-{
-    std::vector<cv::Point2f> subpix;
-    for (const auto &pt : pts)
-    {
-        subpix.emplace_back(static_cast<float>(pt.x), static_cast<float>(pt.y));
-    }
-    try
-    {
-        cv::Mat src_mono;
-        cv::cvtColor(src, src_mono, cv::COLOR_BGR2GRAY);
-        src_mono.convertTo(src_mono, CV_8UC1);
-        cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 30, 0.01);
-
-        cv::cornerSubPix(src_mono, subpix, cv::Size(5, 5), cv::Size(-1, -1), criteria);
-        return subpix;
-    }
-    catch (const cv::Exception &e)
-    {
-        std::cerr << e.what() << '\n';
-        return myutil::cvpt2cvptf(pts);
-    }
-}
-
-std::vector<cv::Point> myutil::cvptf2cvpt(const std::vector<cv::Point2f> &ptfs){
-    std::vector<cv::Point> pts;
-    for (auto &ptf : ptfs)
-    {
-        pts.emplace_back(static_cast<int>(ptf.x), static_cast<int>(ptf.y));
-    }
-    return pts;
-
-}
 //cv:mat croppedImg = src(cv::Rect()); 安全版本
 cv::Mat myutil::safeCrop(const cv::Mat& colorImage, cv::Rect croppedRect) {
 
@@ -306,6 +180,7 @@ cv::Mat myutil::safeCrop(const cv::Mat& colorImage, cv::Rect croppedRect) {
     return croppedImg;
 }
 
+// YYYY-MM-DD
 std::string myutil::getCurrentDate() {  
 
     auto now = std::chrono::system_clock::now();  

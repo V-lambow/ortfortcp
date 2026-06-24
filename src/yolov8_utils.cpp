@@ -1,7 +1,6 @@
 #pragma once
 #include "yolov8_utils.h"
-//using namespace cv;
-//using namespace std;
+
 bool CheckParams(int netHeight, int netWidth, const int* netStride, int strideSize) {
 	if (netHeight % netStride[strideSize - 1] != 0 || netWidth % netStride[strideSize - 1] != 0)
 	{
@@ -19,67 +18,95 @@ bool CheckModelPath(std::string modelPath) {
 		return true;
 
 }
-void LetterBox(const cv::Mat& image, cv::Mat& outImage, cv::Vec4d& params, const cv::Size& newShape,
+
+std::vector<cv::Point> getEdgePointsFromMask(const OutputParams& output) {  
+        std::vector<cv::Point> edgePoints;  
+
+        // 1. 轮廓提取  
+        std::vector<std::vector<cv::Point>> contours;  
+        cv::findContours(output.boxMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);  
+
+        // 2. 将每条轮廓的点转换到原始图像的坐标  
+        for (const auto& contour : contours) {  
+            for (const auto& p : contour) {  
+                // 将 mask 点根据 box 的左上角坐标进行平移  
+                edgePoints.push_back(cv::Point(p.x + output.box.x, p.y + output.box.y));  
+            }  
+        }  
+
+        return edgePoints;  
+}  
+
+
+void resizeAndPadImg(const cv::Mat& image, cv::Mat& outImage, cv::Vec4d& params, const cv::Size& newShape,
 	bool autoShape, bool scaleFill, bool scaleUp, int stride, const cv::Scalar& color)
 {
-	if (false) {
-		int maxLen = MAX(image.rows, image.cols);
-		outImage = cv::Mat::zeros(cv::Size(maxLen, maxLen), CV_8UC3);
-		image.copyTo(outImage(cv::Rect(0, 0, image.cols, image.rows)));
-		params[0] = 1;
-		params[1] = 1;
-		params[3] = 0;
-		params[2] = 0;
-	}
-
-	cv::Size shape = image.size();
-	float r = std::min((float)newShape.height / (float)shape.height,
-		(float)newShape.width / (float)shape.width);
-	if (!scaleUp)
-		r = std::min(r, 1.0f);
-
-	float ratio[2]{ r, r };
-	int new_un_pad[2] = { (int)std::round((float)shape.width * r),(int)std::round((float)shape.height * r) };
-
-	auto dw = (float)(newShape.width - new_un_pad[0]);
-	auto dh = (float)(newShape.height - new_un_pad[1]);
-
-	if (autoShape)
-	{
-		dw = (float)((int)dw % stride);
-		dh = (float)((int)dh % stride);
-	}
-	else if (scaleFill)
-	{
-		dw = 0.0f;
-		dh = 0.0f;
-		new_un_pad[0] = newShape.width;
-		new_un_pad[1] = newShape.height;
-		ratio[0] = (float)newShape.width / (float)shape.width;
-		ratio[1] = (float)newShape.height / (float)shape.height;
-	}
-
-	dw /= 2.0f;
-	dh /= 2.0f;
-
-	if (shape.width != new_un_pad[0] && shape.height != new_un_pad[1])
-	{
-		cv::resize(image, outImage, cv::Size(new_un_pad[0], new_un_pad[1]));
-	}
-	else {
-		outImage = image.clone();
-	}
-
-	int top = int(std::round(dh - 0.1f));
-	int bottom = int(std::round(dh + 0.1f));
-	int left = int(std::round(dw - 0.1f));
-	int right = int(std::round(dw + 0.1f));
-	params[0] = ratio[0];
-	params[1] = ratio[1];
-	params[2] = left;
-	params[3] = top;
-	cv::copyMakeBorder(outImage, outImage, top, bottom, left, right, cv::BORDER_CONSTANT, color);
+	 // 获取原始图像尺寸
+    cv::Size shape = image.size();
+    
+    // 计算缩放比例，保持宽高比
+    float r = std::min(static_cast<float>(newShape.height) / shape.height,
+                       static_cast<float>(newShape.width) / shape.width);
+    
+    // 如果不允许放大，则限制最大缩放比例为1.0
+    if (!scaleUp) {
+        r = std::min(r, 1.0f);
+    }
+    
+    // 计算缩放后的尺寸
+    float ratio[2] = { r, r };
+    int new_un_pad[2] = { 
+        static_cast<int>(std::round(shape.width * r)),
+        static_cast<int>(std::round(shape.height * r))
+    };
+    
+    // 计算填充量
+    auto dw = static_cast<float>(newShape.width - new_un_pad[0]);
+    auto dh = static_cast<float>(newShape.height - new_un_pad[1]);
+    
+    // 如果使用自动形状，则调整填充量以满足步长要求
+    if (autoShape) {
+        dw = static_cast<float>(static_cast<int>(dw) % stride);
+        dh = static_cast<float>(static_cast<int>(dh) % stride);
+    }
+    // 如果使用拉伸填充，则直接填充到目标尺寸
+    else if (scaleFill) {
+        dw = 0.0f;
+        dh = 0.0f;
+        new_un_pad[0] = newShape.width;
+        new_un_pad[1] = newShape.height;
+        ratio[0] = static_cast<float>(newShape.width) / shape.width;
+        ratio[1] = static_cast<float>(newShape.height) / shape.height;
+    }
+    
+    // 将填充量平均分配到四周
+    dw /= 2.0f;
+    dh /= 2.0f;
+    
+    // 执行缩放
+    if (shape.width != new_un_pad[0] || shape.height != new_un_pad[1]) {
+        cv::resize(image, outImage, cv::Size(new_un_pad[0], new_un_pad[1]));
+    } else {
+        outImage = image.clone();
+    }
+    
+    // 计算填充参数
+    int top = static_cast<int>(std::round(dh - 0.1f));
+    int bottom = static_cast<int>(std::round(dh + 0.1f));
+    int left = static_cast<int>(std::round(dw - 0.1f));
+    int right = static_cast<int>(std::round(dw + 0.1f));
+    
+    // 记录变换参数
+    params[0] = ratio[0];  // 宽度缩放比例
+    params[1] = ratio[1];  // 高度缩放比例
+    params[2] = left;      // 左填充量
+    params[3] = top;       // 上填充量
+    
+    // 执行填充
+    cv::copyMakeBorder(outImage, outImage, top, bottom, left, right, 
+                       cv::BORDER_CONSTANT, color);
 }
+
 /// @brief 
 /// @param maskProposals 
 /// @param maskProtos 
@@ -111,7 +138,8 @@ void GetMask(const cv::Mat& maskProposals, const cv::Mat& maskProtos, std::vecto
 
 		cv::Rect roi(int(params[2] / net_width * seg_width), int(params[3] / net_height * seg_height), int(seg_width - params[2] / 2), int(seg_height - params[3] / 2));
 		dest = dest(roi);
-		resize(dest, mask, src_img_shape, cv::INTER_NEAREST);
+		resizeAndPadImg
+	(dest, mask, src_img_shape, cv::INTER_NEAREST);
 
 		//crop
 		cv::Rect temp_rect = output[i].box;
@@ -121,23 +149,7 @@ void GetMask(const cv::Mat& maskProposals, const cv::Mat& maskProtos, std::vecto
 }
 
 
-   std::vector<cv::Point> getEdgePointsFromMask(const OutputParams& output) {  
-        std::vector<cv::Point> edgePoints;  
 
-        // 1. 轮廓提取  
-        std::vector<std::vector<cv::Point>> contours;  
-        cv::findContours(output.boxMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);  
-
-        // 2. 将每条轮廓的点转换到原始图像的坐标  
-        for (const auto& contour : contours) {  
-            for (const auto& p : contour) {  
-                // 将 mask 点根据 box 的左上角坐标进行平移  
-                edgePoints.push_back(cv::Point(p.x + output.box.x, p.y + output.box.y));  
-            }  
-        }  
-
-        return edgePoints;  
-    }  
 
 
 
@@ -197,12 +209,14 @@ void GetMask2(const cv::Mat& maskProposals, const cv::Mat& maskProtos, OutputPar
 	int width = ceil(net_width / seg_width * rang_w / params[0]);
 	int height = ceil(net_height / seg_height * rang_h / params[1]);
 
-	resize(dest, mask, cv::Size(width, height), cv::INTER_NEAREST);
+	resizeAndPadImg
+(dest, mask, cv::Size(width, height), cv::INTER_NEAREST);
 	cv::Rect mask_rect = temp_rect - cv::Point(left, top);
 	mask_rect &= cv::Rect(0, 0, width, height);
 	mask = mask(mask_rect) > mask_threshold;
 	if (mask.rows != temp_rect.height || mask.cols != temp_rect.width) { //https://github.com/UNeedCryDear/yolov8-opencv-onnxruntime-cpp/pull/30
-		resize(mask, mask, temp_rect.size(), cv::INTER_NEAREST);
+		resizeAndPadImg
+	(mask, mask, temp_rect.size(), cv::INTER_NEAREST);
 	}
 	output.boxMask = mask;
 

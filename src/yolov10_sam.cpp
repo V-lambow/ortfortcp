@@ -428,7 +428,7 @@ std::vector<cv::Rect> Yolov10SAM::yolo_infer(std::vector<Ort::Value> &input_tens
     // draw boxes
     std::vector<cv::Rect> result;
     for(const auto i:indices){
-        std::string name = LABEL.at(labels[i]);
+        std::string name = m_classesList.at(labels[i]);
         std::size_t hash = std::hash<std::string>{}(name);
         double r = (hash & 0xFF0000) >> 16;
         double g = (hash & 0x00FF00) >> 8;
